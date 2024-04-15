@@ -1,0 +1,58 @@
+name: Python Build
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        required: false
+        type: string
+      commit:
+        required: false
+        type: string
+      python-version:
+        required: true
+        type: string
+      os:
+        required: true
+        type: string
+
+jobs:
+  Python:
+    runs-on: ${{ inputs.os }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      PYTHON: ${{ inputs.python-version }}
+    steps:
+    - uses: actions/checkout@v4
+      if: ${{ !inputs.branch && !inputs.commit }}
+
+    - uses: actions/checkout@v4
+      if: ${{ inputs.branch }}
+      with:
+        ref: ${{ inputs.branch }}
+        fetch-depth: 0
+
+    - uses: actions/checkout@v4
+      if: ${{ inputs.commit }}
+      with:
+        ref: ${{ inputs.commit }}
+
+    - name: Set up Python ${{ inputs.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install Hatch
+      run: |
+        pip install --upgrade hatch
+
+    - name: Run Linting
+      run: hatch -v run lint
+
+    - name: Run Build
+      run: hatch -v build
+
+    - name: Run Tests
+      run: hatch run test
