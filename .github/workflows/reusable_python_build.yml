@@ -21,7 +21,6 @@ jobs:
     name: ${{ inputs.os }}, python ${{ inputs.python-version }}
     runs-on: ${{ inputs.os }}
     permissions:
-      id-token: write
       contents: read
     env:
       PYTHON: ${{ inputs.python-version }}
