@@ -18,7 +18,7 @@ on:
 
 jobs:
   Python:
-    name: Unit Tests
+    name: ${{ inputs.os }}, python ${{ inputs.python-version }}
     runs-on: ${{ inputs.os }}
     permissions:
       contents: read
