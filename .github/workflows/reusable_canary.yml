@@ -15,6 +15,7 @@ on:
 
 jobs:
   Canary:
+    if: (github.repository == 'aws-deadline/${{inputs.repository}}')
     name: Canary
     runs-on: ubuntu-latest
     environment: ${{inputs.environment}}

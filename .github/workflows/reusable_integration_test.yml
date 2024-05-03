@@ -15,6 +15,7 @@ on:
 
 jobs:
   IntegrationTests:
+    if: (github.repository == 'aws-deadline/${{inputs.repository}}')
     name: Integration Tests
     runs-on: ubuntu-latest
     environment: ${{inputs.environment}}
