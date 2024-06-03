@@ -1,4 +1,4 @@
-name: "Integration Tests"
+name: "E2E Tests"
 
 on:
   workflow_call:
@@ -17,9 +17,9 @@ on:
         type: string
 
 jobs:
-  IntegrationTests:
+  E2ETests:
     if: (github.repository == 'aws-deadline/${{inputs.repository}}')
-    name: Integration Tests
+    name: E2E Tests
     runs-on: ubuntu-latest
     environment: ${{inputs.environment}}
     permissions:
@@ -27,7 +27,6 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-        if: ${{inputs.branch == 'mainline' || inputs.branch == 'release'}}
         with:
           ref: ${{inputs.branch}}
       
@@ -35,7 +34,7 @@ jobs:
         if: ${{inputs.branch == 'release'}}
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_CODEBUILD_RELEASE_INTEG_ROLE }}
+          role-to-assume: ${{ secrets.AWS_CODEBUILD_RELEASE_E2E_ROLE }}
           aws-region: us-west-2
           mask-aws-account-id: true
        
@@ -43,14 +42,14 @@ jobs:
         if: ${{inputs.branch == 'mainline'}}
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_CODEBUILD_MAINLINE_INTEG_ROLE }}
+          role-to-assume: ${{ secrets.AWS_CODEBUILD_MAINLINE_E2E_ROLE }}
           aws-region: us-west-2
           mask-aws-account-id: true
         
-      - name: Run Integration Tests
+      - name: Run E2E Tests
         uses: aws-actions/aws-codebuild-run-build@v1
         with:
-          project-name: ${{inputs.repository}}-${{inputs.branch}}-${{inputs.os}}-integ
+          project-name: ${{inputs.repository}}-${{inputs.branch}}-${{inputs.os}}-e2e
           hide-cloudwatch-logs: true
           env-vars-for-codebuild: |
               TEST_TYPE

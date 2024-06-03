@@ -12,6 +12,9 @@ on:
       environment:
         required: true
         type: string
+      os:
+        required: true
+        type: string
 
 jobs:
   Canary:
@@ -48,7 +51,7 @@ jobs:
         if: ${{inputs.branch == 'mainline'}}
         uses: aws-actions/aws-codebuild-run-build@v1
         with:
-          project-name: ${{inputs.repository}}-${{inputs.branch}}-Canary
+          project-name: ${{inputs.repository}}-${{inputs.branch}}-${{inputs.os}}-canary
           hide-cloudwatch-logs: true
           env-vars-for-codebuild: |
               TEST_TYPE
@@ -59,6 +62,6 @@ jobs:
         if: ${{inputs.branch == 'release'}}
         uses: aws-actions/aws-codebuild-run-build@v1
         with:
-          project-name: ${{inputs.repository}}-${{inputs.branch}}-Canary
+          project-name: ${{inputs.repository}}-${{inputs.branch}}-${{inputs.os}}-canary
           source-version-override: refs/heads/release
           hide-cloudwatch-logs: true
