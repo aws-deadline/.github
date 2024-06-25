@@ -52,6 +52,8 @@ jobs:
           project-name: ${{inputs.repository}}-${{inputs.branch}}-${{inputs.os}}-e2e
           hide-cloudwatch-logs: true
           env-vars-for-codebuild: |
-              TEST_TYPE
+              TEST_TYPE,
+              OPERATING_SYSTEM
         env:
           TEST_TYPE: WHEEL
+          OPERATING_SYSTEM: ${{inputs.os}}
