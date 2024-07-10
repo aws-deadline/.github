@@ -1,0 +1,48 @@
+name: "CodeQL"
+
+on:
+  workflow_call:
+    inputs:
+        languages:
+          description: "Language for CodeQL code check. Supported languages are: 'python', 'typescript', 'javascript' 'go', 'java', 'cpp', 'csharp', 'ruby'."
+          required: false
+          type: string
+          default: "['python']"
+        mode:
+          description: "Supports none, autobuild or manual." 
+          required: false
+          type: string
+          default: none
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      # required for all workflows
+      security-events: write
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+         - language: ${{fromJson(inputs.languages)}}
+           build-mode: ${{inputs.mode}}
+            
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+     # Initializes the CodeQL tools for scanning.
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        queries: +security-and-quality
+        languages: ${{ matrix.language }}
+        build-mode: ${{ matrix.build-mode }}
+    
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+      with:
+        category: "/language:${{matrix.language}}"
+
