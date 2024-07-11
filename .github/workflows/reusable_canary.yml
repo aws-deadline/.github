@@ -55,8 +55,10 @@ jobs:
           hide-cloudwatch-logs: true
           env-vars-for-codebuild: |
               TEST_TYPE
+              OPERATING_SYSTEM
         env:
           TEST_TYPE: WHEEL
+          OPERATING_SYSTEM: ${{inputs.os}}
 
       - name: Run Canary for Release
         if: ${{inputs.branch == 'release'}}
