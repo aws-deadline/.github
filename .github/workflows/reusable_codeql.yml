@@ -4,10 +4,10 @@ on:
   workflow_call:
     inputs:
         languages:
-          description: "Language for CodeQL code check. Supported languages are: 'python', 'typescript', 'javascript' 'go', 'java', 'cpp', 'csharp', 'ruby'."
+          description: "Provide a comma seperated list. Supported languages are: python, typescript, javascript, go, java, cpp, csharp, ruby."
           required: false
           type: string
-          default: "['python']"
+          default: "python"
         mode:
           description: "Supports none, autobuild or manual." 
           required: false
@@ -16,19 +16,11 @@ on:
 
 jobs:
   analyze:
-    name: Analyze (${{ matrix.language }})
+    name: Analyze (${{inputs.languages}})
     runs-on: ubuntu-latest
     permissions:
       # required for all workflows
       security-events: write
-    
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-         - language: ${{fromJson(inputs.languages)}}
-           build-mode: ${{inputs.mode}}
-            
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -38,11 +30,8 @@ jobs:
       uses: github/codeql-action/init@v3
       with:
         queries: +security-and-quality
-        languages: ${{ matrix.language }}
-        build-mode: ${{ matrix.build-mode }}
+        languages: ${{inputs.languages}}
+        build-mode: ${{inputs.mode }}
     
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
-      with:
-        category: "/language:${{matrix.language}}"
-
