@@ -67,3 +67,7 @@ jobs:
           project-name: ${{inputs.repository}}-${{inputs.branch}}-${{inputs.os}}-canary
           source-version-override: refs/heads/release
           hide-cloudwatch-logs: true
+          env-vars-for-codebuild: |
+              OPERATING_SYSTEM
+        env:
+          OPERATING_SYSTEM: ${{inputs.os}}
