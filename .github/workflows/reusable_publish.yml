@@ -81,6 +81,22 @@ jobs:
           pip install --upgrade hatch
           hatch -v build
 
+      # A precommit hook into the GitHub Action workflow.
+      # If the workflow file .github/actions/prepush_release_hook exists in the repository
+      # that is using this workflow, then this will run the workflow defined in that file.
+      # That workflow must be defined to accept all of the inputs in the 'with' clause below.
+      # Uses:
+      #  If a package publish needs to publish additional files to the GitHub release, then
+      #  it should use this hook to:
+      #    1. create a dist_extras/ directory
+      #    2. add all additional files to publish into that directory that aren't publishable to PyPI
+      - name: PrePushReleaseHook
+        uses: ./.github/actions/prepush_release_hook
+        if: ${{ hashFiles('./.github/actions/prepush_release_hook/action.yml') != '' }}
+        with:
+          semver: ${{ env.NEXT_SEMVER }}
+          tag: ${{ env.TAG }}
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -99,7 +115,8 @@ jobs:
 
       - name: Sign
         run: |
-          for file in dist/*; do
+          mkdir -p dist_extras
+          for file in dist/* dist_extras/*; do
              printenv PGP_KEY_PASSPHRASE | gpg --batch --pinentry-mode loopback --local-user "AWS Deadline Cloud" --passphrase-fd 0 --output $file.sig --detach-sign $file
              echo "Created signature file for $file"
           done
@@ -109,7 +126,12 @@ jobs:
           GH_TOKEN: ${{ secrets.CI_TOKEN }}
         run: |
           git push origin $TAG
-          gh release create $TAG dist/* --notes "$RELEASE_NOTES"
+          dist_files=$(ls -A dist_extras | wc -l)
+          if [ "$dist_files" -ge 1 ]; then 
+            gh release create $TAG dist/* dist_extras/* --notes "$RELEASE_NOTES" 
+          else
+            gh release create $TAG dist/* --notes "$RELEASE_NOTES"
+          fi
 
   PublishToInternal:
     needs: Release

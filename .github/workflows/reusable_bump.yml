@@ -34,7 +34,7 @@ jobs:
           git config --local user.email ${{secrets.EMAIL}}
           git config --local user.name ${{secrets.USER}}
 
-      - name: Bump
+      - name: NextSemver
         run: |
           BUMP_ARGS=""
           if [[ "${{ inputs.force_version_bump }}" != "" ]]; then
@@ -50,17 +50,32 @@ jobs:
           hatch env create release
           hatch run release:deps
           NEXT_SEMVER=$(hatch run release:bump $BUMP_ARGS)
+          echo "NEXT_SEMVER=$NEXT_SEMVER" >> $GITHUB_ENV
+          git checkout -b bump/$NEXT_SEMVER
 
+      - name: GenerateChangeLog
+        run: |
           # Grab the new version's changelog and prepend it to the original changelog contents
           python .github/scripts/get_latest_changelog.py > NEW_LOG.md
           cat NEW_LOG.md CHANGELOG.bak.md > CHANGELOG.md
           rm NEW_LOG.md
 
-          git checkout -b bump/$NEXT_SEMVER
           git add CHANGELOG.md
+
+      # A precommit hook into the GitHub Action workflow.
+      # If the action .github/actions/bump_precommit_hook exists in the repository
+      # that is using this workflow, then this will run the workflow defined in that file.
+      # That workflow must be defined to accept all of the inputs in the 'with' clause below.
+      - name: PreCommitHook
+        uses: ./.github/actions/bump_precommit_hook
+        if: ${{ hashFiles('./.github/actions/bump_precommit_hook/action.yml') != '' }}
+        with:
+          semver: ${{ env.NEXT_SEMVER }}
+
+      - name: Commit
+        run: |
           git commit -sm "chore(release): $NEXT_SEMVER"
 
-          echo "NEXT_SEMVER=$NEXT_SEMVER" >> $GITHUB_ENV
           {
             echo 'RELEASE_NOTES<<EOF'
             python .github/scripts/get_latest_changelog.py
