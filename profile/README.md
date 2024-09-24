@@ -1,29 +1,43 @@
 # AWS Deadline Cloud GitHub Org
 
-Home for open source code related to AWS Deadline Cloud.
+Home for open source code related to AWS Deadline Cloud. AWS Deadline Cloud is a fully managed render farm service that simplifies infrastructure management and scaling for teams delivering computer generated imagery. Learn more about AWS Deadline Cloud [here](https://aws.amazon.com/deadline-cloud/).
 
-## Quick start
+## FAQ
 
-**If you want to install Deadline Cloud tools on your workstation**, you can run the Deadline Cloud submitter installer. The installer can be found by going to the AWS Console > AWS Deadline Cloud > Downloads > Deadline Cloud submitter installer > Download.
+- **How do I install Deadline Cloud tools on my workstation?**
 
-**If you're looking for documentation for the AWS Deadline Cloud service**, see the [AWS Deadline Cloud documentation](https://docs.aws.amazon.com/deadline-cloud/).
+    You can run the Deadline Cloud submitter installer. The installer can be found by going to the AWS Console > AWS Deadline Cloud > Downloads > Deadline Cloud submitter installer > Download.
 
-**If you encounter a bug with an integration or tool**, please open an issue in the relevant repository.
+- **Where can I find documentation for the AWS Deadline Cloud service?**
+    
+    See the [AWS Deadline Cloud documentation](https://docs.aws.amazon.com/deadline-cloud/).
 
-**If you want to build your own integration**, you can look through [deadline-cloud-samples](https://github.com/aws-deadline/deadline-cloud-samples) for example job bundles, conda recipes, and other tooling. You can also look through the pre-built integrations below for larger examples. 
+- **How do I report a bug with an integration or tool?**
 
-**If you're looking for more information on defining jobs**, see the [Open Job Description specification](https://github.com/OpenJobDescription/openjd-specifications/) or other repositories in the [Open Job Description GitHub org](https://github.com/OpenJobDescription/).
+    Please open an issue in the relevant repository.
 
-**If you want to contribute to an integration or library**, contributions are gratefully accepted! You can open an issue to request a feature or receive early feedback on an idea before raising a pull request. Pull requests are welcomed for features that would be widely useful to the community and which align with the existing code base.
+-  **How do I build my own integration?**
 
-**If you want to adapt an existing integration to your specific workload**, consider forking a repository and making your changes in the fork.
+    You can look through [deadline-cloud-samples](https://github.com/aws-deadline/deadline-cloud-samples) for example job bundles, conda recipes, and other tooling. You can also look through the pre-built integrations below for larger examples. 
+
+- **Where can I find information about defining jobs?**
+
+    
+    Deadline uses Open Job Description for defining jobs. See the [Open Job Description specification](https://github.com/OpenJobDescription/openjd-specifications/) or other repositories in the [Open Job Description GitHub org](https://github.com/OpenJobDescription/).
+
+- **Do you accept feature requests or contributions?**
+    
+    Yes, contributions are gratefully accepted! You can open an issue to request a feature or receive early feedback on an idea before raising a pull request. Pull requests are welcomed for features that would be widely useful to the community and which align with the existing code base.
+
+- **What if I want to adapt an existing integration to my specific workload?**
+    
+    Consider forking a repository and making your changes in the fork.
 
 
 ## Integrations
-Many repositories in this GitHub org are integrations with digital content creation software. See documentation in the individual repos for more info about features, usage, and compatability.
+This GitHub org has integrations (such as job submission plugins) for a selection of digital content creation (DCC) software. These integrations allow users to submit jobs from inside their favorite applications. See documentation in the individual repos for more info about features, usage, and compatability.
 
-Deadline Cloud supports service-managed fleets (SMF) and customer-managed fleets (CMF). With SMF, 
-Deadline Cloud fully manages the workers running the jobs and includes some pre-configured software. With CMF, the workers run on any customer-managed compute platform such as AWS EC2 or on-premise servers, and all configuration is handled by the customer. Many integrations work with SMF out of the box, and all integrations can be set up on CMF.
+Deadline Cloud supports service-managed fleets (SMF) and customer-managed fleets (CMF). With SMF, Deadline Cloud fully manages the workers running the jobs and includes access to some pre-packaged software applications for convenience. With CMF, the workers run on any customer-managed compute platform such as AWS EC2 or on-premise servers, and all configuration is handled by the customer. Integrations on SMF are intended to work out-of-the-box with minimal configuration; use CMF to fully customize your systems and software.
 
 | Software | Repository | CMF| SMF | 
 | ---------- | - | - | - |
@@ -38,7 +52,7 @@ Deadline Cloud fully manages the workers running the jobs and includes some pre-
 | [SideFX Houdini](https://www.sidefx.com/) | [deadline-cloud-for-houdini](https://github.com/aws-deadline/deadline-cloud-for-houdini) | ✅ | ✅ |
 | [Unreal Engine](https://www.unrealengine.com/) | [deadline-cloud-for-unreal-engine](https://github.com/aws-deadline/deadline-cloud-for-unreal-engine) | ✅ |  |
 
-## Other notable repositories
+## Service clients and sample repositories
 
 | Repository | Description |
 | - | - |
