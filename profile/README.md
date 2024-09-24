@@ -23,7 +23,7 @@ Home for open source code related to AWS Deadline Cloud.
 Many repositories in this GitHub org are integrations with digital content creation software. See documentation in the individual repos for more info about features, usage, and compatability.
 
 Deadline Cloud supports service-managed fleets (SMF) and customer-managed fleets (CMF). With SMF, 
-Deadline fully manages the workers running the jobs and includes some pre-configured software. With CMF, the workers run on any customer-managed compute platform such as AWS EC2 or on-premise servers, and all configruation is handled by the customer. Many integrations work with SMF out of the box, and all integrations can be set up on CMF.
+Deadline Cloud fully manages the workers running the jobs and includes some pre-configured software. With CMF, the workers run on any customer-managed compute platform such as AWS EC2 or on-premise servers, and all configuration is handled by the customer. Many integrations work with SMF out of the box, and all integrations can be set up on CMF.
 
 | Software | Repository | CMF| SMF | 
 | ---------- | - | - | - |
