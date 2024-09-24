@@ -14,7 +14,7 @@ Home for open source code related to AWS Deadline Cloud.
 
 **If you're looking for more information on defining jobs**, see the [Open Job Description specification](https://github.com/OpenJobDescription/openjd-specifications/) or other repositories in the [Open Job Description GitHub org](https://github.com/OpenJobDescription/).
 
-**If you want to contribute to an integration or library**, contributions are gratefully accepted!  You can open feature request issue to request a feature or to propose early feedback on an idea before raising a pull requests. Pull requests are welcomed  for features that would be widely useful to the community and which align with the existing codebase.
+**If you want to contribute to an integration or library**, contributions are gratefully accepted! You can open an issue to request a feature or receive early feedback on an idea before raising a pull request. Pull requests are welcomed for features that would be widely useful to the community and which align with the existing code base.
 
 **If you want to adapt an existing integration to your specific workload**, consider forking a repository and making your changes in the fork.
 
