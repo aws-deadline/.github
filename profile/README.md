@@ -44,4 +44,4 @@ Deadline Cloud fully manages the workers running the jobs and includes some pre-
 | - | - |
 | [deadline-cloud](https://github.com/aws-deadline/deadline-cloud) | A Python CLI and library for interacting with Deadline Cloud, especially submitting jobs. | 
 | [deadline-cloud-samples](https://github.com/aws-deadline/deadline-cloud-samples) | Example code and tools for running workloads on Deadline Cloud. | 
-| [deadline-cloud-worker-agent](https://github.com/aws-deadline/deadline-cloud-worker-agent) | Software that runs on workers and communicates with the Dealine API for receiving and completing tasks. | 
+| [deadline-cloud-worker-agent](https://github.com/aws-deadline/deadline-cloud-worker-agent) | Software that runs on workers and communicates with the Deadline Cloud API for receiving and completing tasks. | 
