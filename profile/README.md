@@ -12,7 +12,7 @@ Home for open source code related to AWS Deadline Cloud.
 
 **If you want to build your own integration**, you can look through [deadline-cloud-samples](https://github.com/aws-deadline/deadline-cloud-samples) for  example job bundles, conda recipes, and other tooling. You can also look through the pre-built integrations below for larger examples. 
 
-**If you're looking for more information Open Job Description which Deadline uses for defining jobs**, see the [Open Job Description specification](https://github.com/OpenJobDescription/openjd-specifications/) or other repositories in the [Open Job Description GitHub org](https://github.com/OpenJobDescription/).
+**If you're looking for more information on defining jobs**, see the [Open Job Description specification](https://github.com/OpenJobDescription/openjd-specifications/) or other repositories in the [Open Job Description GitHub org](https://github.com/OpenJobDescription/).
 
 **If you want to contribute to an integration or library**, contributions are gratefully accepted!  You can open feature request issue to request a feature or to propose early feedback on an idea before raising a pull requests. Pull requests are welcomed  for features that would be widely useful to the community and which align with the existing codebase.
 
