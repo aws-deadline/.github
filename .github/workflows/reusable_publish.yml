@@ -115,23 +115,21 @@ jobs:
 
       - name: Sign
         run: |
-          mkdir -p dist_extras
+          shopt -s nullglob
           for file in dist/* dist_extras/*; do
              printenv PGP_KEY_PASSPHRASE | gpg --batch --pinentry-mode loopback --local-user "AWS Deadline Cloud" --passphrase-fd 0 --output $file.sig --detach-sign $file
              echo "Created signature file for $file"
           done
+          shopt -u nullglob
 
       - name: PushRelease
         env:
           GH_TOKEN: ${{ secrets.CI_TOKEN }}
         run: |
           git push origin $TAG
-          dist_files=$(ls -A dist_extras | wc -l)
-          if [ "$dist_files" -ge 1 ]; then 
-            gh release create $TAG dist/* dist_extras/* --notes "$RELEASE_NOTES" 
-          else
-            gh release create $TAG dist/* --notes "$RELEASE_NOTES"
-          fi
+          shopt -s nullglob
+          gh release create $TAG dist/* dist_extras/* --notes "$RELEASE_NOTES" 
+          shopt -u nullglob
 
   PublishToInternal:
     needs: Release
