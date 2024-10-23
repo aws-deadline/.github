@@ -37,6 +37,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_CODEBUILD_RELEASE_E2E_ROLE }}
           aws-region: us-west-2
           mask-aws-account-id: true
+          role-duration-seconds: 7200
        
       - name: Configure AWS credentials for mainline
         if: ${{inputs.branch == 'mainline'}}
@@ -45,6 +46,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_CODEBUILD_MAINLINE_E2E_ROLE }}
           aws-region: us-west-2
           mask-aws-account-id: true
+          role-duration-seconds: 7200
         
       - name: Run E2E Tests
         uses: aws-actions/aws-codebuild-run-build@v1
