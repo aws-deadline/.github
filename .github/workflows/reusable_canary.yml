@@ -38,6 +38,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_CODEBUILD_RELEASE_CANARY_ROLE }}
           aws-region: us-west-2
           mask-aws-account-id: true
+          role-duration-seconds: 7200
        
       - name: Configure AWS credentials for mainline
         if: ${{inputs.branch == 'mainline'}}
@@ -46,6 +47,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_CODEBUILD_MAINLINE_CANARY_ROLE }}
           aws-region: us-west-2
           mask-aws-account-id: true
+          role-duration-seconds: 7200
         
       - name: Run Canary for Mainline
         if: ${{inputs.branch == 'mainline'}}
