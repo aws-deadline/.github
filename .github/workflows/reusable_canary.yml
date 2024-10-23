@@ -48,6 +48,7 @@ jobs:
           mask-aws-account-id: true
         
       - name: Run Canary for Mainline
+        timeout-minutes: 120
         if: ${{inputs.branch == 'mainline'}}
         uses: aws-actions/aws-codebuild-run-build@v1
         with:
@@ -61,6 +62,7 @@ jobs:
           OPERATING_SYSTEM: ${{inputs.os}}
 
       - name: Run Canary for Release
+        timeout-minutes: 120
         if: ${{inputs.branch == 'release'}}
         uses: aws-actions/aws-codebuild-run-build@v1
         with:
