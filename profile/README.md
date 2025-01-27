@@ -46,7 +46,7 @@ Deadline Cloud supports service-managed fleets (SMF) and customer-managed fleets
 | [Autodesk Maya](https://www.autodesk.com/products/maya/overview/) | [deadline-cloud-for-maya](https://github.com/aws-deadline/deadline-cloud-for-maya) | ✅ | ✅ |
 | [Blender](https://www.blender.org/) | [deadline-cloud-for-blender](https://github.com/aws-deadline/deadline-cloud-for-blender) | ✅ | ✅ |
 | [KeyShot Studio](https://www.keyshot.com/) | [deadline-cloud-for-keyshot](https://github.com/aws-deadline/deadline-cloud-for-keyshot) | ✅ | ✅ |
-| [Maxon Cinema 4D](https://www.maxon.net/en/cinema-4d) | [deadline-cloud-for-cinema-4d](https://github.com/aws-deadline/deadline-cloud-for-cinema-4d) | ✅ |  |
+| [Maxon Cinema 4D](https://www.maxon.net/en/cinema-4d) | [deadline-cloud-for-cinema-4d](https://github.com/aws-deadline/deadline-cloud-for-cinema-4d) | ✅ | ✅ |
 | [Nuke](https://www.foundry.com/products/nuke-family/nuke) | [deadline-cloud-for-nuke](https://github.com/aws-deadline/deadline-cloud-for-nuke) | ✅ | ✅ |
 | [Rhino](https://www.rhino3d.com/) | [deadline-cloud-for-rhino](https://github.com/aws-deadline/deadline-cloud-for-rhino) | ✅ |  |
 | [SideFX Houdini](https://www.sidefx.com/) | [deadline-cloud-for-houdini](https://github.com/aws-deadline/deadline-cloud-for-houdini) | ✅ | ✅ |
