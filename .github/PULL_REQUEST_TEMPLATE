@@ -1,0 +1,30 @@
+*delete text starting here*
+Please ensure that you have read through the [contributing guidelines](https://github.com/aws-deadline/.github/blob/mainline/CONTRIBUTING.md#contributing-via-pull-requests) before continuing.
+*delete text ending here*
+
+Fixes: *<insert link to GitHub issue here>*
+
+### What was the problem/requirement? (What/Why)
+
+### What was the solution? (How)
+
+### What is the impact of this change?
+
+### How was this change tested?
+
+### Was this change documented?
+
+*delete text starting here*
+- Did you update all relevant docstrings for functions that you modified?
+- Should the README.md, DEVELOPMENT.md, or other documents in the repository's docs/ directory be updated along with your change?
+*delete text ending here*
+
+### Is this a breaking change?
+
+*delete text starting here*
+A breaking change is one that modifies a public contract in some way or otherwise changes functionality of this application in a way
+that is not backwards compatible.
+
+----
+
+*By submitting this pull request, I confirm that you can use, modify, copy, and redistribute this contribution, under the terms of your choice.*
