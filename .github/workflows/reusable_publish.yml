@@ -1,4 +1,4 @@
-name: "Publish"
+name: 'Publish'
 
 on:
   workflow_call:
@@ -46,15 +46,39 @@ jobs:
         with:
           python-version: '3.9'
 
+      # Use CodeArtifact to so that any dependencies we package up in the PrePushReleaseHook
+      # are from an internal repository.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CODEARTIFACT_ROLE }}
+          aws-region: us-west-2
+          mask-aws-account-id: true
+
+      - name: Configure pip to use CodeArtifact
+        shell: bash
+        env:
+          CODEARTIFACT_REGION: 'us-west-2'
+          CODEARTIFACT_DOMAIN: ${{ secrets.CODEARTIFACT_DOMAIN }}
+          CODEARTIFACT_ACCOUNT_ID: ${{ secrets.CODEARTIFACT_ACCOUNT_ID }}
+          CODEARTIFACT_REPOSITORY: ${{ secrets.CODEARTIFACT_REPOSITORY }}
+        run: |
+          aws codeartifact login \
+            --tool pip \
+            --domain $CODEARTIFACT_DOMAIN \
+            --domain-owner $CODEARTIFACT_ACCOUNT_ID \
+            --repository $CODEARTIFACT_REPOSITORY \
+            --region $CODEARTIFACT_REGION
+
       - name: ConfigureGit
         run: |
           git config --local user.email ${{ secrets.EMAIL }}
           git config --local user.name ${{ secrets.USER }}
-      
+
       - name: MergePushRelease
         run: |
           git merge --ff-only origin/mainline -v
-          git push origin release    
+          git push origin release
 
       - name: PrepRelease
         id: prep-release
@@ -150,7 +174,7 @@ jobs:
         with:
           project-name: ${{ github.event.repository.name }}-release-Publish
           hide-cloudwatch-logs: true
-  
+
   PublishToRepository:
     needs: PublishToInternal
     runs-on: ubuntu-latest
@@ -159,7 +183,7 @@ jobs:
       id-token: write
       contents: read
     env:
-      CODEARTIFACT_REGION: "us-west-2"
+      CODEARTIFACT_REGION: 'us-west-2'
       CODEARTIFACT_DOMAIN: ${{ secrets.CODEARTIFACT_DOMAIN }}
       CODEARTIFACT_ACCOUNT_ID: ${{ secrets.CODEARTIFACT_ACCOUNT_ID }}
       CODEARTIFACT_REPOSITORY: ${{ secrets.CODEARTIFACT_REPOSITORY }}
