@@ -1,0 +1,289 @@
+name: "Publish"
+
+on:
+  workflow_call:
+    inputs:
+      oses:
+        required: false
+        type: string
+        default: "['ubuntu-latest', 'windows-latest', 'macos-latest']"
+      python-versions:
+        required: false
+        type: string
+        default: "['3.9', '3.10', '3.11', '3.12']"
+      installer_oses:
+        required: false
+        type: string
+
+
+jobs:
+  VerifyCommit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: VerifyAuthor
+        run: |
+          EXPECTED_AUTHOR=${{secrets.EMAIL}}
+          AUTHOR=$(git show -s --format='%ae' HEAD)
+          if [[ $AUTHOR != $EXPECTED_AUTHOR ]]; then
+            echo "ERROR: Expected author email to be '$EXPECTED_AUTHOR', but got '$AUTHOR'. Aborting release."
+            exit 1
+          else
+            echo "Verified author email ($AUTHOR) is as expected ($EXPECTED_AUTHOR)"
+          fi
+
+  UnitTests:
+    needs: VerifyCommit
+    name: UnitTests
+    strategy:
+      matrix:
+        os: ${{ fromJson(inputs.oses) }}
+        python-version: ${{ fromJson(inputs.python-versions) }}
+    uses: ./.github/workflows/reusable_python_build.yml
+    with:
+      os: ${{ matrix.os }}
+      python-version: ${{ matrix.python-version }}
+      commit: ${{ github.ref }}
+
+  PreRelease:
+    needs: UnitTests
+    runs-on: ubuntu-latest
+    environment: release
+    outputs: 
+      tag: ${{steps.prep-release.outputs.TAG}}
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.CI_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: ConfigureGit
+        run: |
+          git config --local user.email ${{ secrets.EMAIL }}
+          git config --local user.name ${{ secrets.USER }}
+      
+      - name: MergePushRelease
+        run: |
+          git merge --ff-only origin/mainline -v
+
+      - name: PrepRelease
+        id: prep-release
+        run: |
+          COMMIT_TITLE=$(git show -s --format='%s' HEAD)
+          NEXT_SEMVER=$(python -c 'import sys, re; print(re.match(r"chore\(release\): ([0-9]+\.[0-9]+\.[0-9]+).*", sys.argv[1]).group(1))' "$COMMIT_TITLE")
+
+          # The format of the tag must match the pattern in pyproject.toml -> tool.semantic_release.tag_format
+          TAG="$NEXT_SEMVER"
+
+          git tag -a $TAG -m "Release $TAG"
+
+          echo "TAG=$TAG" >> $GITHUB_ENV
+          echo "TAG=$TAG" >> $GITHUB_OUTPUT
+          echo "NEXT_SEMVER=$NEXT_SEMVER" >> $GITHUB_ENV
+          {
+            echo 'RELEASE_NOTES<<EOF'
+            python .github/scripts/get_latest_changelog.py
+            echo EOF
+          } >> $GITHUB_ENV
+            # Tag must be made before building so the generated _version.py files have the correct version
+            
+          git push origin $TAG
+
+      - name: Build
+        run: |
+          pip install --upgrade hatch
+          hatch -v build
+
+      # A precommit hook into the GitHub Action workflow.
+      # If the workflow file .github/actions/prepush_release_hook exists in the repository
+      # that is using this workflow, then this will run the workflow defined in that file.
+      # That workflow must be defined to accept all of the inputs in the 'with' clause below.
+      # Uses:
+      #  If a package publish needs to publish additional files to the GitHub release, then
+      #  it should use this hook to:
+      #    1. create a dist_extras/ directory
+      #    2. add all additional files to publish into that directory that aren't publishable to PyPI
+      - name: PrePushReleaseHook
+        uses: ./.github/actions/prepush_release_hook
+        if: ${{ hashFiles('./.github/actions/prepush_release_hook/action.yml') != '' }}
+        with:
+          semver: ${{ env.NEXT_SEMVER }}
+          tag: ${{ env.TAG }}
+
+      - name: UploadArtifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifact
+          path: |
+            dist
+            dist_extras
+    
+  BuildInstallers:
+    name: BuildInstallers
+    needs: PreRelease
+    uses: aws-deadline/.github/.github/workflows/reusable_build_installers.yml@mainline
+    if: ${{ inputs.installer_oses }}
+    with:
+      tag:  ${{needs.PreRelease.outputs.tag}}
+      oses: ${{ inputs.installer_oses }}
+      environment: release
+
+  IsCondaReady:
+    needs: BuildInstallers
+    if: always()
+    runs-on: ubuntu-latest
+    environment: release
+    name: “Is the Conda Package available in all ProdWaves and have you ran any required manual tests?”
+    steps:
+      - run: |
+         :
+
+  Release:
+    needs: [IsCondaReady, PreRelease]
+    runs-on: ubuntu-latest
+    name: Release
+    permissions:
+      id-token: write
+      contents: write
+    environment: release
+    env:
+      TAG: ${{needs.PreRelease.outputs.tag}}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{env.TAG}}
+          fetch-depth: 0
+          token: ${{ secrets.CI_TOKEN }}
+
+      - name: Download
+        uses: actions/download-artifact@v4
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PGP_KEY_SECRET_ROLE }}
+          aws-region: us-west-2
+          mask-aws-account-id: true
+
+      - name: Import PGP Key
+        run: |
+          export SECRET_STRING="$(aws secretsmanager get-secret-value --secret-id ${{ secrets.AWS_PGP_KEY_SECRET }} --query 'SecretString')"
+          printenv SECRET_STRING | jq -r '. | fromjson | .PrivateKey' | gpg --batch --pinentry-mode loopback --import --armor
+
+          PGP_KEY_PASSPHRASE=$(printenv SECRET_STRING | jq -r '. | fromjson | .Passphrase')
+          echo "::add-mask::$PGP_KEY_PASSPHRASE"
+          echo "PGP_KEY_PASSPHRASE=$PGP_KEY_PASSPHRASE" >> $GITHUB_ENV
+
+      - name: Sign
+        run: |
+          shopt -s nullglob
+          for file in build-artifact/dist/* build-artifact/dist_extras/*; do
+             printenv PGP_KEY_PASSPHRASE | gpg --batch --pinentry-mode loopback --local-user "AWS Deadline Cloud" --passphrase-fd 0 --output $file.sig --detach-sign $file
+             echo "Created signature file for $file"
+          done
+          shopt -u nullglob
+
+      - name: PushRelease
+        env:
+          GH_TOKEN: ${{ secrets.CI_TOKEN }}
+        run: |
+          shopt -s nullglob
+          gh release create $TAG build-artifact/dist/* build-artifact/dist_extras/* --notes "$RELEASE_NOTES" 
+          shopt -u nullglob
+
+  PublishToInternal:
+    needs: [Release, PreRelease]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    env:
+      TAG: ${{needs.PreRelease.outputs.tag}}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CODEBUILD_RELEASE_PUBLISH_ROLE }}
+          aws-region: us-west-2
+          mask-aws-account-id: true
+
+      - name: Run CodeBuild
+        uses: aws-actions/aws-codebuild-run-build@v1
+        with:
+          project-name: ${{ github.event.repository.name }}-release-Publish
+          hide-cloudwatch-logs: true
+          source-version-override: refs/tags/${{env.TAG}}
+  
+  PublishToRepository:
+    needs: [PublishToInternal, PreRelease]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      CODEARTIFACT_REGION: "us-west-2"
+      CODEARTIFACT_DOMAIN: ${{ secrets.CODEARTIFACT_DOMAIN }}
+      CODEARTIFACT_ACCOUNT_ID: ${{ secrets.CODEARTIFACT_ACCOUNT_ID }}
+      CODEARTIFACT_REPOSITORY: ${{ secrets.CODEARTIFACT_REPOSITORY }}
+      CUSTOMER_DOMAIN: ${{ secrets.CUSTOMER_DOMAIN }}
+      CUSTOMER_REPOSITORY: ${{ secrets.CUSTOMER_REPOSITORY }}
+      TAG: ${{needs.PreRelease.outputs.tag}}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{env.TAG}}
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CODEARTIFACT_ROLE }}
+          aws-region: us-west-2
+          mask-aws-account-id: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade hatch
+          pip install --upgrade twine
+
+      - name: Build
+        run: hatch -v build
+
+      - name: Publish to Repository
+        run: |
+          export TWINE_USERNAME=aws
+          export TWINE_PASSWORD=`aws codeartifact get-authorization-token --domain ${{ secrets.CODEARTIFACT_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --query authorizationToken --output text`
+          export TWINE_REPOSITORY_URL=`aws codeartifact get-repository-endpoint --domain ${{ secrets.CODEARTIFACT_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --repository ${{ secrets.CODEARTIFACT_REPOSITORY }} --format pypi --query repositoryEndpoint --output text`
+          twine upload build-artifact/dist/*
+
+      - name: Publish to Customer Repository
+        run: |
+          export TWINE_USERNAME=aws
+          export TWINE_PASSWORD=`aws codeartifact get-authorization-token --domain ${{ secrets.CUSTOMER_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --query authorizationToken --output text`
+          export TWINE_REPOSITORY_URL=`aws codeartifact get-repository-endpoint --domain ${{ secrets.CUSTOMER_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --repository ${{ secrets.CUSTOMER_REPOSITORY }} --format pypi --query repositoryEndpoint --output text`
+          twine upload build-artifact/dist/*
