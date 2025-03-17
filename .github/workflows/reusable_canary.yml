@@ -62,12 +62,18 @@ jobs:
           TEST_TYPE: WHEEL
           OPERATING_SYSTEM: ${{inputs.os}}
 
+      - name: Get Latest Release Tag
+        if: ${{inputs.branch == 'release'}}
+        run: |
+          TAG=$(git describe --tags `git rev-list --tags="[0-9]*.[0-9]*.[0-9]*" --max-count=1`)
+          echo "TAG=$TAG" >> $GITHUB_ENV
+
       - name: Run Canary for Release
         if: ${{inputs.branch == 'release'}}
         uses: aws-actions/aws-codebuild-run-build@v1
         with:
           project-name: ${{inputs.repository}}-${{inputs.branch}}-${{inputs.os}}-canary
-          source-version-override: refs/heads/release
+          source-version-override:  refs/tags/${{env.TAG}}
           hide-cloudwatch-logs: true
           env-vars-for-codebuild: |
               OPERATING_SYSTEM

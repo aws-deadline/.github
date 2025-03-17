@@ -50,12 +50,33 @@ jobs:
         
       - name: Run E2E Tests
         uses: aws-actions/aws-codebuild-run-build@v1
+        if: ${{inputs.branch == 'mainline'}}
         with:
           project-name: ${{inputs.repository}}-${{inputs.branch}}-${{inputs.os}}-e2e
           hide-cloudwatch-logs: true
           env-vars-for-codebuild: |
               TEST_TYPE,
               OPERATING_SYSTEM
+        env:
+          TEST_TYPE: WHEEL
+          OPERATING_SYSTEM: ${{inputs.os}}
+
+      - name: Get Latest Release Tag
+        if: ${{inputs.branch == 'release'}}
+        run: |
+          TAG=$(git describe --tags `git rev-list --tags="[0-9]*.[0-9]*.[0-9]*" --max-count=1`)
+          echo "TAG=$TAG" >> $GITHUB_ENV
+
+      - name: Run E2E Tests
+        uses: aws-actions/aws-codebuild-run-build@v1
+        if: ${{inputs.branch == 'release'}}
+        with:
+          project-name: ${{inputs.repository}}-${{inputs.branch}}-${{inputs.os}}-e2e
+          hide-cloudwatch-logs: true
+          env-vars-for-codebuild: |
+              TEST_TYPE,
+              OPERATING_SYSTEM
+          source-version-override: refs/tags/${{env.TAG}}
         env:
           TEST_TYPE: WHEEL
           OPERATING_SYSTEM: ${{inputs.os}}
