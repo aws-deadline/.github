@@ -3,13 +3,20 @@ name: "Build Installers"
 on:
   workflow_call:
     inputs:
-      tag:
+      ref_type:
+        required: true
+        type: string
+        default: "tags"
+      ref:
         required: true
         type: string
       oses:
         required: true
         type: string
       environment:
+        required: true
+        type: string
+      project_name:
         required: true
         type: string
         
@@ -37,6 +44,6 @@ jobs:
       - name: Build Installer
         uses: aws-actions/aws-codebuild-run-build@v1
         with:
-          project-name: ${{github.repository}}-${{matrix.os}}Installer
-          source-version-override: refs/tag/${{inputs.tag}}
+          project-name: ${{inputs.project_name}}-${{matrix.os}}Installer
+          source-version-override: refs/${{inputs.ref_type}}/${{inputs.ref}}
           hide-cloudwatch-logs: true
