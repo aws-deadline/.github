@@ -14,6 +14,10 @@ on:
       installer_oses:
         required: false
         type: string
+    outputs:
+      tag:
+        description: "The newly created tag"
+        value: ${{ jobs.PreRelease.outputs.tag }}
 
 
 jobs:
