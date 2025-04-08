@@ -312,8 +312,8 @@ jobs:
           pip install --upgrade hatch
           pip install --upgrade twine
 
-      - name: Build
-        run: hatch -v build
+      - name: Download
+        uses: actions/download-artifact@v4
 
       - name: Publish to Repository
         run: |
