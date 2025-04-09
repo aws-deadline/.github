@@ -41,9 +41,20 @@ jobs:
           mask-aws-account-id: true
           role-duration-seconds: 3600
         
-      - name: Build Installer
+      - name: Build Installer Manual
+        if: github.event_name == 'workflow_dispatch'
         uses: aws-actions/aws-codebuild-run-build@v1
         with:
           project-name: ${{inputs.project_name}}-${{matrix.os}}Installer
           source-version-override: refs/${{inputs.ref_type}}/${{inputs.ref}}
           hide-cloudwatch-logs: true
+          artifacts-type-override: NO_ARTIFACTS
+
+      - name: Build Installer Release
+        if: github.event_name != 'workflow_dispatch'
+        uses: aws-actions/aws-codebuild-run-build@v1
+        with:
+          project-name: ${{inputs.project_name}}-${{matrix.os}}Installer
+          source-version-override: refs/${{inputs.ref_type}}/${{inputs.ref}}
+          hide-cloudwatch-logs: true
+
