@@ -1,0 +1,41 @@
+name: "Create new Tag"
+
+on:
+  workflow_call:
+  
+
+jobs:
+  CreateTag:
+    runs-on: ubuntu-latest
+    outputs: 
+      tag: ${{steps.prep-release.outputs.TAG}}
+      semvar: ${{steps.prep-release.outputs.NEXT_SEMVER}}
+      release_notes: ${{steps.prep-release.outputs.RELEASE_NOTES}}
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{github.ref}}
+          fetch-depth: 0
+      - name: ConfigureGit
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "github-actions@github.com"
+      - name: PrepMainlineRelease
+        id: prep-release
+        run: |
+            COMMIT_TITLE=$(git show -s --format='%s' HEAD)
+            NEXT_SEMVER=$(python -c 'import sys, re; print(re.match(r"chore\(release\): ([0-9]+\.[0-9]+\.[0-9]+).*", sys.argv[1]).group(1))' "$COMMIT_TITLE")
+  
+            # The format of the tag must match the pattern in pyproject.toml -> tool.semantic_release.tag_format
+            TAG="$NEXT_SEMVER"
+  
+            git tag -a $TAG -m "Release $TAG"
+  
+            echo "TAG=$TAG" >> $GITHUB_OUTPUT
+            echo "NEXT_SEMVER=$NEXT_SEMVER" >> $GITHUB_OUTPUT
+              
+            git push origin $TAG

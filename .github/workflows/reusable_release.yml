@@ -1,0 +1,70 @@
+name: "Github Release"
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+
+
+jobs:
+  Release:
+    runs-on: ubuntu-latest
+    name: Release
+    permissions:
+      id-token: write
+      contents: write
+    environment: release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{inputs.tag}}
+          fetch-depth: 0
+          token: ${{ secrets.CI_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Download
+        uses: actions/download-artifact@v4
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PGP_KEY_SECRET_ROLE }}
+          aws-region: us-west-2
+          mask-aws-account-id: true
+
+      - name: Import PGP Key
+        run: |
+          export SECRET_STRING="$(aws secretsmanager get-secret-value --secret-id ${{ secrets.AWS_PGP_KEY_SECRET }} --query 'SecretString')"
+          printenv SECRET_STRING | jq -r '. | fromjson | .PrivateKey' | gpg --batch --pinentry-mode loopback --import --armor
+
+          PGP_KEY_PASSPHRASE=$(printenv SECRET_STRING | jq -r '. | fromjson | .Passphrase')
+          echo "::add-mask::$PGP_KEY_PASSPHRASE"
+          echo "PGP_KEY_PASSPHRASE=$PGP_KEY_PASSPHRASE" >> $GITHUB_ENV
+
+      - name: Sign
+        run: |
+          shopt -s nullglob
+          for file in build-artifact/dist/* build-artifact/dist_extras/*; do
+             printenv PGP_KEY_PASSPHRASE | gpg --batch --pinentry-mode loopback --local-user "AWS Deadline Cloud" --passphrase-fd 0 --output $file.sig --detach-sign $file
+             echo "Created signature file for $file"
+          done
+          shopt -u nullglob
+
+      - name: PushRelease
+        env:
+          GH_TOKEN: ${{ secrets.CI_TOKEN }}
+        run: |
+          RELEASE_NOTE=$(python .github/scripts/get_latest_changelog.py)
+      
+          shopt -s nullglob
+          gh release create $TAG build-artifact/dist/* build-artifact/dist_extras/* --notes "$RELEASE_NOTES" 
+
+
+ 

@@ -42,7 +42,7 @@ jobs:
           role-duration-seconds: 3600
         
       - name: Build Installer Manual
-        if: github.event_name == 'workflow_dispatch'
+        if: github.workflow == 'Build Installers'
         uses: aws-actions/aws-codebuild-run-build@v1
         with:
           project-name: ${{inputs.project_name}}-${{matrix.os}}Installer
@@ -51,7 +51,7 @@ jobs:
           artifacts-type-override: NO_ARTIFACTS
 
       - name: Build Installer Release
-        if: github.event_name != 'workflow_dispatch'
+        if: github.workflow != 'Build Installers'
         uses: aws-actions/aws-codebuild-run-build@v1
         with:
           project-name: ${{inputs.project_name}}-${{matrix.os}}Installer

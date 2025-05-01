@@ -9,6 +9,9 @@ on:
       commit:
         required: false
         type: string
+      ref:
+        required: false
+        type: string
       python-version:
         required: true
         type: string
@@ -26,7 +29,7 @@ jobs:
       PYTHON: ${{ inputs.python-version }}
     steps:
     - uses: actions/checkout@v4
-      if: ${{ !inputs.branch && !inputs.commit }}
+      if: ${{ !inputs.branch && !inputs.commit && !inputs.ref }}
 
     - uses: actions/checkout@v4
       if: ${{ inputs.branch }}
@@ -38,6 +41,11 @@ jobs:
       if: ${{ inputs.commit }}
       with:
         ref: ${{ inputs.commit }}
+
+    - uses: actions/checkout@v4
+      if: ${{ inputs.ref }}
+      with:
+        ref: ${{ inputs.ref }}
       
     - name: setup ${{ inputs.os }}
       if: inputs.os == 'ubuntu-latest'
