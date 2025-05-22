@@ -52,7 +52,7 @@ jobs:
         run: |
           shopt -s nullglob
           for file in build-artifact/dist/* build-artifact/dist_extras/*; do
-             printenv PGP_KEY_PASSPHRASE | gpg --batch --pinentry-mode loopback --local-user "AWS Deadline Cloud" --passphrase-fd 0 --output $file.sig --detach-sign $file
+             printenv PGP_KEY_PASSPHRASE | gpg --batch --pinentry-mode loopback --local-user ${{secrets.PGP_USER}} --passphrase-fd 0 --output $file.sig --detach-sign $file
              echo "Created signature file for $file"
           done
           shopt -u nullglob
@@ -61,7 +61,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.CI_TOKEN }}
         run: |
-          RELEASE_NOTE=$(python .github/scripts/get_latest_changelog.py)
+          RELEASE_NOTES=$(python .github/scripts/get_latest_changelog.py)
+          TAG=${{inputs.tag}}
       
           shopt -s nullglob
           gh release create $TAG build-artifact/dist/* build-artifact/dist_extras/* --notes "$RELEASE_NOTES" 

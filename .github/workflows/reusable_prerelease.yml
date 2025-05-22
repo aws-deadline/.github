@@ -3,64 +3,13 @@ name: "Prerelease"
 on:
   workflow_call:
     inputs:
-      oses:
-        required: false
-        type: string
-        default: "['ubuntu-latest', 'windows-latest', 'macos-latest']"
-      python-versions:
-        required: false
-        type: string
-        default: "['3.9', '3.10', '3.11', '3.12']"
-      installer_oses:
-        required: false
-        type: string
       tag:
         required: true
         type: string
-    outputs:
-      tag:
-        description: "The published tag"
-        value: ${{ inputs.tag }}
 
 
 jobs:
-  VerifyCommit:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: refs/tags/${{inputs.tag}}
-          fetch-depth: 0
-
-      - name: VerifyAuthor
-        run: |
-          EXPECTED_AUTHOR=${{secrets.EMAIL}}
-          AUTHOR=$(git show -s --format='%ae' HEAD)
-          if [[ $AUTHOR != $EXPECTED_AUTHOR ]]; then
-            echo "ERROR: Expected author email to be '$EXPECTED_AUTHOR', but got '$AUTHOR'. Aborting release."
-            exit 1
-          else
-            echo "Verified author email ($AUTHOR) is as expected ($EXPECTED_AUTHOR)"
-          fi
-
-  UnitTests:
-    needs: VerifyCommit
-    name: UnitTests
-    strategy:
-      matrix:
-        os: ${{ fromJson(inputs.oses) }}
-        python-version: ${{ fromJson(inputs.python-versions) }}
-    uses: ./.github/workflows/reusable_python_build.yml
-    with:
-      os: ${{ matrix.os }}
-      python-version: ${{ matrix.python-version }}
-      ref: ${{inputs.tag}}
-      
   PreRelease:
-    needs: UnitTests
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -102,47 +51,3 @@ jobs:
           path: |
             dist
             dist_extras
-    
-  BuildInstallers:
-    name: BuildInstallers
-    needs: PreRelease
-    uses: erico-aws/.github/.github/workflows/reusable_build_installers.yml@mainline
-    secrets: inherit
-    if: ${{ inputs.installer_oses }}
-    with:
-      project_name: ${{ github.event.repository.name }} 
-      ref:  ${{inputs.tag}}
-      ref_type: tags
-      oses: ${{ inputs.installer_oses }}
-      environment: release
-
-  StageBuiltInstallers:
-    needs: BuildInstallers
-    runs-on: ubuntu-latest
-    environment: release
-    if: needs.Release.result == 'success' && ${{ inputs.installer_oses }} 
-    permissions:
-        id-token: write
-    strategy:
-        matrix:
-          os: ${{ fromJson(inputs.installer_oses) }}    
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-            role-to-assume: ${{ secrets.AWS_CODEBUILD_MAINLINE_INSTALLER_ROLE }}
-            aws-region: us-west-2
-            mask-aws-account-id: true
-      - name: Run CodeBuild
-        uses: aws-actions/aws-codebuild-run-build@v1
-        with:
-            project-name: ReleaseInstallerProject
-            hide-cloudwatch-logs: true
-            env-vars-for-codebuild: |
-                REPONAME,
-                OPERATING_SYSTEM,
-                VERSION
-        env:
-            REPONAME: ${{ github.event.repository.name }} 
-            OPERATING_SYSTEM: ${{ matrix.os }}
-            VERSION: ${{inputs.tag}}

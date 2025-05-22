@@ -8,7 +8,7 @@ on:
         type: string
         
 jobs:
-  PublishToInternal:
+  PublishToCodeArtifact:
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -27,58 +27,3 @@ jobs:
           project-name: ${{ github.event.repository.name }}-release-Publish
           hide-cloudwatch-logs: true
           source-version-override: refs/tags/${{inputs.tag}}
-  
-  PublishToRepository:
-    needs: PublishToInternal
-    runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      id-token: write
-      contents: read
-    env:
-      CODEARTIFACT_REGION: "us-west-2"
-      CODEARTIFACT_DOMAIN: ${{ secrets.CODEARTIFACT_DOMAIN }}
-      CODEARTIFACT_ACCOUNT_ID: ${{ secrets.CODEARTIFACT_ACCOUNT_ID }}
-      CODEARTIFACT_REPOSITORY: ${{ secrets.CODEARTIFACT_REPOSITORY }}
-      CUSTOMER_DOMAIN: ${{ secrets.CUSTOMER_DOMAIN }}
-      CUSTOMER_REPOSITORY: ${{ secrets.CUSTOMER_REPOSITORY }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{inputs.tag}}
-          fetch-depth: 0
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_CODEARTIFACT_ROLE }}
-          aws-region: us-west-2
-          mask-aws-account-id: true
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.9'
-
-      - name: Install dependencies
-        run: |
-          pip install --upgrade hatch
-          pip install --upgrade twine
-
-      - name: Download
-        uses: actions/download-artifact@v4
-
-      - name: Publish to Repository
-        run: |
-          export TWINE_USERNAME=aws
-          export TWINE_PASSWORD=`aws codeartifact get-authorization-token --domain ${{ secrets.CODEARTIFACT_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --query authorizationToken --output text`
-          export TWINE_REPOSITORY_URL=`aws codeartifact get-repository-endpoint --domain ${{ secrets.CODEARTIFACT_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --repository ${{ secrets.CODEARTIFACT_REPOSITORY }} --format pypi --query repositoryEndpoint --output text`
-          twine upload build-artifact/dist/*
-
-      - name: Publish to Customer Repository
-        run: |
-          export TWINE_USERNAME=aws
-          export TWINE_PASSWORD=`aws codeartifact get-authorization-token --domain ${{ secrets.CUSTOMER_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --query authorizationToken --output text`
-          export TWINE_REPOSITORY_URL=`aws codeartifact get-repository-endpoint --domain ${{ secrets.CUSTOMER_DOMAIN }} --domain-owner ${{ secrets.CODEARTIFACT_ACCOUNT_ID }} --repository ${{ secrets.CUSTOMER_REPOSITORY }} --format pypi --query repositoryEndpoint --output text`
-          twine upload build-artifact/dist/*

@@ -15,10 +15,12 @@ on:
       os:
         required: true
         type: string
+      tag:
+        required: false
+        type: string
 
 jobs:
   E2ETests:
-    if: (github.repository == 'aws-deadline/${{inputs.repository}}')
     name: E2E Tests
     runs-on: ubuntu-latest
     environment: ${{inputs.environment}}
@@ -26,10 +28,6 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{inputs.branch}}
-      
       - name: Configure AWS credentials for release
         if: ${{inputs.branch == 'release'}}
         uses: aws-actions/configure-aws-credentials@v4
@@ -53,6 +51,7 @@ jobs:
         with:
           project-name: ${{inputs.repository}}-${{inputs.branch}}-${{inputs.os}}-e2e
           hide-cloudwatch-logs: true
+          source-version-override: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || inputs.branch }}
           env-vars-for-codebuild: |
               TEST_TYPE,
               OPERATING_SYSTEM

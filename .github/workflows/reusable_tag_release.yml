@@ -1,0 +1,42 @@
+# .github/workflows/reusable_tag_and_check.yml
+name: "Tag and Check Release"
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: false
+        type: string
+        description: "Existing tag to use (optional)"
+    outputs:
+      tag:
+        description: "The validated tag"
+        value: ${{ jobs.TagRelease.outputs.tag }}
+
+jobs:
+  TagRelease:
+    runs-on: ubuntu-latest
+    environment: release
+    outputs:
+      tag: ${{ steps.tag-release.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{github.ref}}
+          fetch-depth: 0
+          token: ${{ secrets.CI_TOKEN }}
+          
+      - name: Tag Release
+        id: tag-release
+        uses: aws-deadline/.github/.github/actions/tag-release@mainline
+        with:
+          tag: ${{ inputs.tag || '' }}
+          email: ${{ secrets.EMAIL }}
+          username: ${{ secrets.USER }}
+          
+      - name: Check Release
+        uses: aws-deadline/.github/.github/actions/check-release@mainline
+        with:
+          tag: ${{ steps.tag-release.outputs.tag }}
+          expected_author: ${{ secrets.EMAIL }}

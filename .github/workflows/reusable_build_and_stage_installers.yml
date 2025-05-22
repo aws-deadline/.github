@@ -1,0 +1,56 @@
+name: "Build and Stage Installers"
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+      oses:
+        required: true
+        type: string
+      project_name:
+        required: true
+        type: string
+
+jobs:
+  BuildInstallers:
+    name: BuildInstallers
+    uses: aws-deadline/.github/.github/workflows/reusable_build_installers.yml@mainline
+    secrets: inherit
+    with:
+      project_name: ${{ inputs.project_name }}
+      ref: ${{ inputs.tag }}
+      ref_type: tags
+      oses: ${{ inputs.oses }}
+      environment: release
+
+  StageBuiltInstallers:
+    needs: BuildInstallers
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    strategy:
+      matrix:
+        os: ${{ fromJson(inputs.oses) }}    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CODEBUILD_MAINLINE_INSTALLER_ROLE }}
+          aws-region: us-west-2
+          mask-aws-account-id: true
+      - name: Run CodeBuild
+        uses: aws-actions/aws-codebuild-run-build@v1
+        with:
+          project-name: ReleaseInstallerProject
+          hide-cloudwatch-logs: true
+          env-vars-for-codebuild: |
+              REPONAME,
+              OPERATING_SYSTEM,
+              VERSION
+        env:
+          REPONAME: ${{ inputs.project_name }}
+          OPERATING_SYSTEM: ${{ matrix.os }}
+          VERSION: ${{ inputs.tag }}
