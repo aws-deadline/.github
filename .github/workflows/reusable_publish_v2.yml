@@ -97,12 +97,7 @@ jobs:
           echo "TAG=$TAG" >> $GITHUB_ENV
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
           echo "NEXT_SEMVER=$NEXT_SEMVER" >> $GITHUB_ENV
-          {
-            echo 'RELEASE_NOTES<<EOF'
-            python .github/scripts/get_latest_changelog.py
-            echo EOF
-          } >> $GITHUB_ENV
-            # Tag must be made before building so the generated _version.py files have the correct version
+          # Tag must be made before building so the generated _version.py files have the correct version
             
           git push origin $TAG
 
@@ -204,6 +199,14 @@ jobs:
              echo "Created signature file for $file"
           done
           shopt -u nullglob
+
+      - name: Generate Release Notes
+        run: |
+          {
+            echo 'RELEASE_NOTES<<EOF'
+            python .github/scripts/get_latest_changelog.py
+            echo EOF
+          } >> $GITHUB_ENV
 
       - name: PushRelease
         env:
