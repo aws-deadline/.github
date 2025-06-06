@@ -7,13 +7,16 @@ on:
         required: true
         type: string
       branch:
-        required: true
+        required: false
         type: string
       environment:
         required: true
         type: string
       os:
         required: true
+        type: string
+      tag:
+        required: false
         type: string
 
 jobs:
@@ -26,13 +29,8 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
-        if: ${{inputs.branch == 'mainline' || inputs.branch == 'release'}}
-        with:
-          ref: ${{inputs.branch}}
-      
       - name: Configure AWS credentials for release
-        if: ${{inputs.branch == 'release'}}
+        if: ${{inputs.environment == 'release'}}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_CODEBUILD_RELEASE_INTEG_ROLE }}
@@ -40,7 +38,7 @@ jobs:
           mask-aws-account-id: true
        
       - name: Configure AWS credentials for mainline
-        if: ${{inputs.branch == 'mainline'}}
+        if: ${{inputs.environment == 'mainline'}}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_CODEBUILD_MAINLINE_INTEG_ROLE }}
@@ -50,8 +48,9 @@ jobs:
       - name: Run Integration Tests
         uses: aws-actions/aws-codebuild-run-build@v1
         with:
-          project-name: ${{inputs.repository}}-${{inputs.branch}}-${{inputs.os}}-integ
+          project-name: ${{inputs.repository}}-${{inputs.environment}}-${{inputs.os}}-integ
           hide-cloudwatch-logs: true
+          source-version-override: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || inputs.branch }}
           env-vars-for-codebuild: |
               TEST_TYPE,
               OPERATING_SYSTEM

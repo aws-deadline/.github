@@ -23,7 +23,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{github.ref}}
+          ref: ${{ inputs.tag || github.sha }}
           fetch-depth: 0
           token: ${{ secrets.CI_TOKEN }}
           
