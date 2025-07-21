@@ -49,7 +49,7 @@ Deadline Cloud supports service-managed fleets (SMF) and customer-managed fleets
 | [Maxon Cinema 4D](https://www.maxon.net/en/cinema-4d) | [deadline-cloud-for-cinema-4d](https://github.com/aws-deadline/deadline-cloud-for-cinema-4d) | ✅ | ✅ |
 | [Nuke](https://www.foundry.com/products/nuke-family/nuke) | [deadline-cloud-for-nuke](https://github.com/aws-deadline/deadline-cloud-for-nuke) | ✅ | ✅ |
 | [SideFX Houdini](https://www.sidefx.com/) | [deadline-cloud-for-houdini](https://github.com/aws-deadline/deadline-cloud-for-houdini) | ✅ | ✅ |
-| [Unreal Engine](https://www.unrealengine.com/) | [deadline-cloud-for-unreal-engine](https://github.com/aws-deadline/deadline-cloud-for-unreal-engine) | ✅ |  |
+| [Unreal Engine](https://www.unrealengine.com/) | [deadline-cloud-for-unreal-engine](https://github.com/aws-deadline/deadline-cloud-for-unreal-engine) | ✅ | ✅ |
 
 * Supported via Service Managed Fleets with Host Configuration Scripts. [AWS Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_HostConfiguration.html)
 
