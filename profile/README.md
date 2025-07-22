@@ -37,22 +37,20 @@ Home for open source code related to AWS Deadline Cloud. AWS Deadline Cloud is a
 ## Integrations
 This GitHub org has integrations (such as job submission plugins) for a selection of digital content creation (DCC) software. These integrations allow users to submit jobs from inside their favorite applications. See documentation in the individual repos for more info about features, usage, and compatibility.
 
-Deadline Cloud supports service-managed fleets (SMF) and customer-managed fleets (CMF). With SMF, Deadline Cloud fully manages the workers running the jobs and includes access to some pre-packaged software applications for convenience. With CMF, the workers run on any customer-managed compute platform such as AWS EC2 or on-premise servers, and all configuration is handled by the customer. Integrations on SMF are intended to work out-of-the-box with minimal configuration; use CMF to fully customize your systems and software.
-
-| Software | Repository | CMF| SMF |
-| ---------- | - | - | - |
-| [Adobe After Effects](https://www.adobe.com/products/aftereffects.html) | [deadline-cloud-for-after-effects](https://github.com/aws-deadline/deadline-cloud-for-after-effects) | ✅ | ✅ |
-| [Autodesk 3ds Max](https://www.autodesk.com/products/3ds-max/overview) | [deadline-cloud-for-3ds-max](https://github.com/aws-deadline/deadline-cloud-for-3ds-max) | ✅ | ＊ |
-| [Autodesk Maya](https://www.autodesk.com/products/maya/overview/) | [deadline-cloud-for-maya](https://github.com/aws-deadline/deadline-cloud-for-maya) | ✅ | ✅ |
-| [Blender](https://www.blender.org/) | [deadline-cloud-for-blender](https://github.com/aws-deadline/deadline-cloud-for-blender) | ✅ | ✅ |
-| [KeyShot Studio](https://www.keyshot.com/) | [deadline-cloud-for-keyshot](https://github.com/aws-deadline/deadline-cloud-for-keyshot) | ✅ | ✅ |
-| [Maxon Cinema 4D](https://www.maxon.net/en/cinema-4d) | [deadline-cloud-for-cinema-4d](https://github.com/aws-deadline/deadline-cloud-for-cinema-4d) | ✅ | ✅ |
-| [Nuke](https://www.foundry.com/products/nuke-family/nuke) | [deadline-cloud-for-nuke](https://github.com/aws-deadline/deadline-cloud-for-nuke) | ✅ | ✅ |
-| [SideFX Houdini](https://www.sidefx.com/) | [deadline-cloud-for-houdini](https://github.com/aws-deadline/deadline-cloud-for-houdini) | ✅ | ✅ |
-| [Unreal Engine](https://www.unrealengine.com/) | [deadline-cloud-for-unreal-engine](https://github.com/aws-deadline/deadline-cloud-for-unreal-engine) | ✅ | ✅ |
-
-* Supported via Service Managed Fleets with Host Configuration Scripts. [AWS Documentation](https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_HostConfiguration.html)
-
+ | Software | Repository
+ | - | -
+ | [Adobe After Effects](https://www.adobe.com/products/aftereffects.html) | [deadline-cloud-for-after-effects](https://github.com/aws-deadline/deadline-cloud-for-after-effects)
+ | [Autodesk 3ds Max](https://www.autodesk.com/products/3ds-max/overview) | [deadline-cloud-for-3ds-max](https://github.com/aws-deadline/deadline-cloud-for-3ds-max)
+ | [Autodesk Arnold for Maya](https://www.autodesk.com/products/arnold/overview) | [deadline-cloud-for-maya](https://github.com/aws-deadline/deadline-cloud-for-maya)
+ | [Autodesk Maya](https://www.autodesk.com/products/maya/overview/) | [deadline-cloud-for-maya](https://github.com/aws-deadline/deadline-cloud-for-maya)
+ | [Blender](https://blender.org) | [deadline-cloud-for-blender](https://github.com/aws-deadline/deadline-cloud-for-blender)
+ | [Chaos V-Ray for Maya](https://www.chaos.com/vray/maya) | [deadline-cloud-for-maya](https://github.com/aws-deadline/deadline-cloud-for-maya)
+ | [Foundry Nuke](https://www.foundry.com/products/nuke-family/nuke) | [deadline-cloud-for-nuke](https://github.com/aws-deadline/deadline-cloud-for-nuke)
+ | [KeyShot Studio](https://www.keyshot.com/) | [deadline-cloud-for-keyshot](https://github.com/aws-deadline/deadline-cloud-for-keyshot)
+ | [Maxon Cinema 4D](https://www.maxon.net/en/cinema-4d) | [deadline-cloud-for-cinema-4d](https://github.com/aws-deadline/deadline-cloud-for-cinema-4d)
+ | [SideFX Houdini](https://www.sidefx.com/) | [deadline-cloud-for-houdini](https://github.com/aws-deadline/deadline-cloud-for-houdini)
+ | [Unreal Engine](https://www.unrealengine.com) | [deadline-cloud-for-unreal-engine](https://github.com/aws-deadline/deadline-cloud-for-unreal-engine)
+ 
 ## Service clients and sample repositories
 
 | Repository | Description |
