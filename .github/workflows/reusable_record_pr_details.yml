@@ -1,0 +1,28 @@
+name: Record PR Details
+
+on:
+  workflow_call:
+    outputs:
+      artifact_name:
+        description: "The name of the artifact containing PR details"
+        value: "pr-info"
+
+permissions:
+  contents: read
+
+jobs:
+  record-pr-details:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create PR info artifact
+        run: |
+          mkdir -p ./pr-info
+          echo "${{ github.event.pull_request.number }}" > ./pr-info/pr-number.txt
+          echo "${{ github.event.action }}" > ./pr-info/pr-action.txt
+      
+      - name: Upload PR info artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-info
+          path: ./pr-info/
+          retention-days: 1

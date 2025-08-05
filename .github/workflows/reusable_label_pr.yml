@@ -1,0 +1,28 @@
+name: Reusable Label PR
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        required: true
+        type: string
+        description: "The PR number to label"
+      label_name:
+        required: false
+        type: string
+        default: "waiting-on-maintainers"
+        description: "The label to add to the PR"
+
+permissions:
+  pull-requests: write
+
+jobs:
+  add-label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add label to PR
+        run: |
+          echo "Adding label '${{ inputs.label_name }}' to PR #${{ inputs.pr_number }}"
+          gh pr edit ${{ inputs.pr_number }} --add-label "${{ inputs.label_name }}" --repo ${{ github.repository }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

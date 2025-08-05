@@ -1,0 +1,75 @@
+name: Extract PR Details
+
+on:
+  workflow_call:
+    inputs:
+      record_pr_workflow_id:
+        description: "Record PR workflow execution ID to download PR details"
+        required: true
+        type: number
+      artifact_name:
+        description: "Name of the artifact containing PR details"
+        required: false
+        type: string
+        default: "pr-info"
+      workflow_origin:
+        description: "Repository full name for runner integrity"
+        required: true
+        type: string
+    outputs:
+      pr_number:
+        description: "PR Number"
+        value: ${{ jobs.extract_pr_details.outputs.pr_number }}
+      pr_action:
+        description: "PR Action (opened, reopened, etc.)"
+        value: ${{ jobs.extract_pr_details.outputs.pr_action }}
+
+permissions:
+  actions: read  # For downloading artifacts
+
+jobs:
+  extract_pr_details:
+    runs-on: ubuntu-latest
+    outputs:
+      pr_number: ${{ steps.extract-pr-details.outputs.pr_number }}
+      pr_action: ${{ steps.extract-pr-details.outputs.pr_action }}
+    steps:
+      - name: Download PR artifact
+        uses: actions/github-script@v6
+        env:
+          WORKFLOW_ID: ${{ inputs.record_pr_workflow_id }}
+          ARTIFACT_NAME: ${{ inputs.artifact_name }}
+        with:
+          script: |
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: process.env.WORKFLOW_ID
+            });
+            
+            const matchArtifact = artifacts.data.artifacts.find(artifact => 
+              artifact.name === process.env.ARTIFACT_NAME
+            );
+            
+            if (!matchArtifact) {
+              throw new Error(`Artifact '${process.env.ARTIFACT_NAME}' not found`);
+            }
+            
+            const download = await github.rest.actions.downloadArtifact({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: matchArtifact.id,
+              archive_format: 'zip'
+            });
+            
+            const fs = require('fs');
+            fs.writeFileSync('pr-info.zip', Buffer.from(download.data));
+      
+      - name: Extract PR details
+        id: extract-pr-details
+        run: |
+          unzip pr-info.zip
+          PR_NUMBER=$(cat pr-number.txt)
+          PR_ACTION=$(cat pr-action.txt)
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "pr_action=$PR_ACTION" >> $GITHUB_OUTPUT
