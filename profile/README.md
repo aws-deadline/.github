@@ -43,6 +43,7 @@ This GitHub org has integrations (such as job submission plugins) for a selectio
  | [Autodesk 3ds Max](https://www.autodesk.com/products/3ds-max/overview) | [deadline-cloud-for-3ds-max](https://github.com/aws-deadline/deadline-cloud-for-3ds-max)
  | [Autodesk Arnold for Maya](https://www.autodesk.com/products/arnold/overview) | [deadline-cloud-for-maya](https://github.com/aws-deadline/deadline-cloud-for-maya)
  | [Autodesk Maya](https://www.autodesk.com/products/maya/overview/) | [deadline-cloud-for-maya](https://github.com/aws-deadline/deadline-cloud-for-maya)
+ | [Autodesk VRED](https://www.autodesk.com/products/vred/overview/) | [deadline-cloud-for-vred](https://github.com/aws-deadline/deadline-cloud-for-vred)
  | [Blender](https://blender.org) | [deadline-cloud-for-blender](https://github.com/aws-deadline/deadline-cloud-for-blender)
  | [Chaos V-Ray for Maya](https://www.chaos.com/vray/maya) | [deadline-cloud-for-maya](https://github.com/aws-deadline/deadline-cloud-for-maya)
  | [Foundry Nuke](https://www.foundry.com/products/nuke-family/nuke) | [deadline-cloud-for-nuke](https://github.com/aws-deadline/deadline-cloud-for-nuke)
