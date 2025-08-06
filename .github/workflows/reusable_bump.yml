@@ -20,7 +20,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: mainline
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
           token: ${{ secrets.CI_TOKEN }}
 
@@ -89,4 +89,4 @@ jobs:
           git push -u origin bump/$NEXT_SEMVER
 
           # Needs "Allow GitHub Actions to create and approve pull requests" under Settings > Actions
-          gh pr create --base mainline --title "chore(release): $NEXT_SEMVER" --body "$RELEASE_NOTES"
+          gh pr create --base ${{ github.ref_name }} --title "chore(release): $NEXT_SEMVER" --body "$RELEASE_NOTES"
