@@ -49,7 +49,7 @@ jobs:
           pip install --upgrade hatch
           hatch env create release
           hatch run release:deps
-          NEXT_SEMVER=$(hatch run release:bump $BUMP_ARGS)
+          NEXT_SEMVER=$(hatch run release:version $BUMP_ARGS)
           echo "NEXT_SEMVER=$NEXT_SEMVER" >> $GITHUB_ENV
           git checkout -b bump/$NEXT_SEMVER
 
