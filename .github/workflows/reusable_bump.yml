@@ -54,7 +54,6 @@ jobs:
           # Reset the semantic-release commit but keep the file changes
           git reset --soft HEAD~1
 
-          NEXT_SEMVER=$(hatch run release:version $BUMP_ARGS)
           echo "NEXT_SEMVER=$NEXT_SEMVER" >> $GITHUB_ENV
           git checkout -b bump/$NEXT_SEMVER
 
