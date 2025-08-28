@@ -27,6 +27,7 @@ jobs:
       contents: read
     env:
       PYTHON: ${{ inputs.python-version }}
+      PY_COLORS: 1
     steps:
     - uses: actions/checkout@v4
       if: ${{ !inputs.branch && !inputs.commit && !inputs.ref }}
