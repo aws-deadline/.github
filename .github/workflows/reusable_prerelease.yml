@@ -25,7 +25,7 @@ jobs:
 
       - name: Build
         run: |
-          pip install --upgrade hatch click==8.2
+          pip install --upgrade hatch "click<8.3"
           hatch -v build
 
       # A precommit hook into the GitHub Action workflow.

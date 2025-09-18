@@ -65,7 +65,7 @@ jobs:
 
     - name: Install Hatch
       run: |
-        pip install --upgrade hatch click==8.2
+        pip install --upgrade hatch "click<8.3"
 
     - name: Run Linting
       run: hatch -v run lint
