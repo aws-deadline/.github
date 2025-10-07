@@ -1,0 +1,35 @@
+# AWS Deadline Cloud Integrations
+
+Documentation site for AWS Deadline Cloud DCC integrations and user guides.
+
+## Documentation
+
+Build and serve the documentation locally:
+
+```bash
+uv run mkdocs serve --watch gen_files/ --watch overrides/ --watch docs/
+```
+
+Visit http://127.0.0.1:8000 to view the site.
+
+## Adding a New Integration
+
+To add a new integration, update `gen_files/config.py`:
+
+```python
+INTEGRATIONS = {
+    'new-integration': {
+        'repo': 'deadline-cloud-for-new-integration',
+        'display_name': 'New Integration Name',
+        'has_user_guide': True  # or False if no user guide exists
+    },
+    # ... existing integrations
+}
+```
+
+For user guides (`has_user_guide: True`), the repository needs:
+- `docs/user_guide/index.md` (main user guide page)
+- Optional additional `.md` files (become sub-pages)
+- Images in `docs/user_guide/images/`
+
+The integration appears automatically in navigation, alphabetized by display name.
