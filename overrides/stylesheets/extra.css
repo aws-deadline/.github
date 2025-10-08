@@ -62,7 +62,8 @@ img {
   border-radius: 10px;
 }
 
-/* Hide sidenav title, it's unnecessary */
 .md-nav__title {
-  display: none;
+  /* Fix some styling with the sidenav title when not on mobile */
+  background: none !important;
+  box-shadow: none !important;
 }
