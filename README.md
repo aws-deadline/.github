@@ -12,7 +12,13 @@ uv run mkdocs serve --watch gen_files/ --watch overrides/ --watch docs/
 
 Visit http://127.0.0.1:8000 to view the site.
 
-## Adding a New Integration
+Validate all links and images in the generated documentation:
+
+```bash
+uv run python scripts/validate_docs.py
+```
+
+### Adding a New Integration
 
 To add a new integration, update `gen_files/config.py`:
 

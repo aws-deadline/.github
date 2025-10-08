@@ -27,7 +27,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Build and deploy documentation
+      - name: Build documentation
+        run: mkdocs build
+
+      - name: Validate links and images
+        run: python scripts/validate_docs.py
+
+      - name: Deploy documentation
         env:
           GH_TOKEN: ${{ github.token }}
         run: mkdocs gh-deploy --force
