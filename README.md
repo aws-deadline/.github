@@ -1,10 +1,16 @@
 # AWS Deadline Cloud Integrations
 
-Documentation site for AWS Deadline Cloud DCC integrations and user guides.
+This repository contains:
 
-## Documentation
+- **User guides** - MkDocs-based user guides for AWS Deadline Cloud DCC integrations
+- **Reusable workflows** - GitHub Actions workflows for integration repositories
+- **Organization profile** - GitHub profile README in `profile/README.md`
 
-Build and serve the documentation locally:
+User guides for AWS Deadline Cloud DCC integrations.
+
+## User Guides
+
+Build and serve the user guides locally:
 
 ```bash
 uv run mkdocs serve --watch gen_files/ --watch overrides/ --watch docs/
@@ -12,7 +18,7 @@ uv run mkdocs serve --watch gen_files/ --watch overrides/ --watch docs/
 
 Visit http://127.0.0.1:8000 to view the site.
 
-Validate all links and images in the generated documentation:
+Validate all links and images in the generated user guides:
 
 ```bash
 uv run python scripts/validate_docs.py
