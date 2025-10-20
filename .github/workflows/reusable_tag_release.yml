@@ -13,6 +13,10 @@ on:
         description: "The validated tag"
         value: ${{ jobs.TagRelease.outputs.tag }}
 
+
+permissions:
+  contents: write
+
 jobs:
   TagRelease:
     runs-on: ubuntu-latest
