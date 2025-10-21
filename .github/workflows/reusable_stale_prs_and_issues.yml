@@ -2,6 +2,11 @@ name: 'Check stale issues/PRs.'
 on: 
   workflow_call:
 
+permissions:
+  issues: write
+  pull-requests: write
+  contents: read
+
 jobs:
   stale-review-stage:
     runs-on: ubuntu-latest
