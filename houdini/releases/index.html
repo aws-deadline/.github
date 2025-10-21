@@ -1,0 +1,1369 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for AWS Deadline Cloud integrations">
+      
+      
+      
+        <link rel="canonical" href="https://aws-deadline.github.io/houdini/releases/">
+      
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../../unreal-engine/">
+      
+      
+      <link rel="icon" href="../../assets/images/logo.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+    
+    
+      
+        <title>Releases - AWS Deadline Cloud Integrations</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#sidefx-houdini-releases" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="AWS Deadline Cloud Integrations" class="md-header__button md-logo" aria-label="AWS Deadline Cloud Integrations" data-md-component="logo">
+      
+  <img src="../../assets/images/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AWS Deadline Cloud Integrations
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Releases
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="AWS Deadline Cloud Integrations" class="md-nav__button md-logo" aria-label="AWS Deadline Cloud Integrations" data-md-component="logo">
+      
+  <img src="../../assets/images/logo.png" alt="logo">
+
+    </a>
+    AWS Deadline Cloud Integrations
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Adobe After Effects
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Adobe After Effects
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../after-effects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../after-effects/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Autodesk 3ds Max
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Autodesk 3ds Max
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../3ds-max/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../3ds-max/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Autodesk Maya
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Autodesk Maya
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../maya/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../maya/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Blender
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Blender
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../blender/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../blender/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Foundry Nuke
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Foundry Nuke
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nuke/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nuke/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    KeyShot Studio
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            KeyShot Studio
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../keyshot/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../keyshot/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../keyshot/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Maxon Cinema 4D
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            Maxon Cinema 4D
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cinema-4d/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cinema-4d/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cinema-4d/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    SideFX Houdini
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            SideFX Houdini
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Unreal Engine
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            Unreal Engine
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../unreal-engine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../unreal-engine/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="sidefx-houdini-releases">SideFX Houdini Releases</h1>
+<h2 id="079-2025-09-15">0.7.9 (2025-09-15)</h2>
+<h3 id="features">Features</h3>
+<ul>
+<li>Added Houdini 21.0. (#297) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/fd1444efed0d058b8cd56f7d4931727083ffaf9d"><code>fd1444e</code></a>)</li>
+</ul>
+<h3 id="bug-fixes">Bug Fixes</h3>
+<ul>
+<li>Scenes with wedge nodes fail to render (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/4b34f2feecb1fe799ccac227b9db2c0b835a632b"><code>4b34f2f</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.7.9">View on GitHub</a></p>
+<hr />
+<h2 id="078-2025-07-24">0.7.8 (2025-07-24)</h2>
+<h3 id="bug-fixes_1">Bug Fixes</h3>
+<ul>
+<li>System installs have no default path (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/42a3454338ab3c77e783f84233951bb3ca9ab7ef"><code>42a3454</code></a>)</li>
+<li>properly clean up env vars created by the installer (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/a28364709357c20f66de19366e11e01a76a70f5f"><code>a283647</code></a>)</li>
+<li>remove tmp install directory after installation (#266) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/6dcfccd721c94976799ba13a4ff38fcc1bf0b917"><code>6dcfccd</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.7.8">View on GitHub</a></p>
+<hr />
+<h2 id="077-2025-05-26">0.7.7 (2025-05-26)</h2>
+<h3 id="features_1">Features</h3>
+<ul>
+<li>add Redshift pathmapping support (#261) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/79a753170dea011b4ce71549af84b581e01a67b0"><code>79a7531</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_2">Bug Fixes</h3>
+<ul>
+<li><code>Path not available</code> errors due to Environment Variables not being pathmapped(#259) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/ea16801e1ccc4faf183d20b5fe8746a15aea259d"><code>ea16801</code></a>)</li>
+<li>ROP geometry nodes not being evaluated (#257) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/cd02e83cf4bf686cd2474c395fae76972ac6bb14"><code>cd02e83</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.7.7">View on GitHub</a></p>
+<hr />
+<h2 id="076-2025-04-14">0.7.6 (2025-04-14)</h2>
+<h3 id="bug-fixes_3">Bug Fixes</h3>
+<ul>
+<li>bug that caused unhandled exceptions during file parsing (#235) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/c304bca9ca54ed2ad3e15bf5536877b80c8988f7"><code>c304bca</code></a>)</li>
+<li>job attachments tab showing unevaluated and evaluated entries for same file (#234) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/8582f6e2269ac70aad8a773dce63cf7c979d99b0"><code>8582f6e</code></a>)</li>
+<li><strong>submitter</strong>: do not stop finding job attachment files if a node's filename parm could not be evaluated (#225) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/cfe442535a6e9e09f707393ef816aaeb4a712003"><code>cfe4425</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.7.6">View on GitHub</a></p>
+<hr />
+<h2 id="075-2025-01-13">0.7.5 (2025-01-13)</h2>
+<h3 id="features_2">Features</h3>
+<ul>
+<li><strong>adaptor</strong>: Add HYTHON_EXECUTABLE environment variable  (#202) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/aed5d1c69f16f2c061831f9f9323090eff676b58"><code>aed5d1c</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_4">Bug Fixes</h3>
+<ul>
+<li><strong>installer</strong>: fix installer system installs (#203) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/bd591cd32af8b86c7222c9c4fe98af360d182a93"><code>bd591cd</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.7.5">View on GitHub</a></p>
+<hr />
+<h2 id="074-2024-11-21">0.7.4 (2024-11-21)</h2>
+<h3 id="features_3">Features</h3>
+<ul>
+<li>installer component support for Houdini 20.0 and 20.5 (#192) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/244bc7130999f38e5d408b0e845939411b09d2a4"><code>244bc71</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_5">Bug Fixes</h3>
+<ul>
+<li>detect ROP USD Render output directories (#190) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/fbeb81df89944f6164d58835fb72cee37a3019b4"><code>fbeb81d</code></a>)</li>
+<li>add deadline cloud soho script (#189) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/f88974ff8b79fced74c145f53821b1542f75092e"><code>f88974f</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.7.4">View on GitHub</a></p>
+<hr />
+<h2 id="073-2024-10-11">0.7.3 (2024-10-11)</h2>
+<h3 id="features_4">Features</h3>
+<ul>
+<li>add 20.0 and 20.5 dev installation (#173) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/81a9d7385f7f80a04919db2ec359a8490377f8d2"><code>81a9d73</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.7.3">View on GitHub</a></p>
+<hr />
+<h2 id="072-2024-06-27">0.7.2 (2024-06-27)</h2>
+<h3 id="bug-fixes_6">Bug Fixes</h3>
+<ul>
+<li>fail when mantra license error is seen (#164) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/6012e2b2859abf9f08db702022e571e7d9a35d36"><code>6012e2b</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.7.2">View on GitHub</a></p>
+<hr />
+<h2 id="071-2024-06-19">0.7.1 (2024-06-19)</h2>
+<h3 id="features_5">Features</h3>
+<ul>
+<li>capture files with time-based variables for job attachments (#162) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/55d1a6b9b991f4f648e1eaf135b3f15ea55e514f"><code>55d1a6b</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.7.1">View on GitHub</a></p>
+<hr />
+<h2 id="070-2024-05-29">0.7.0 (2024-05-29)</h2>
+<h3 id="breaking-changes">BREAKING CHANGES</h3>
+<ul>
+<li>run simulations sequentially (#149) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/084553c5ab74921e6a33715540066ebeca4ac8f4"><code>084553c</code></a>)</li>
+</ul>
+<h3 id="features_6">Features</h3>
+<ul>
+<li>add help text for various fields (#156) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/a9154b9d19a358b9bed47f52e757a74c91eadd00"><code>a9154b9</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_7">Bug Fixes</h3>
+<ul>
+<li>parse files no longer removes manually added attachments (#153) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/a0c0988b2e9321edf92e4559aa9df7ed08682e6e"><code>a0c0988</code></a>)</li>
+<li>add missing submission telemetry event (#158) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/f1ec97d16312fbb950308ae3b5d0a88b4e98b36e"><code>f1ec97d</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.7.0">View on GitHub</a></p>
+<hr />
+<h2 id="063-2024-05-22">0.6.3 (2024-05-22)</h2>
+<h3 id="bug-fixes_8">Bug Fixes</h3>
+<ul>
+<li>apply farm ID and queue ID settings correctly (#151) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/1f7a8f44bd357223247c928a3da9903d213d221c"><code>1f7a8f4</code></a>)</li>
+<li>improve error messages when farm or queue ID not defined (#148) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/48ee027b1e7a2b3a81735a0205ffcd97ac37305e"><code>48ee027</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.6.3">View on GitHub</a></p>
+<hr />
+<h2 id="062-2024-05-08">0.6.2 (2024-05-08)</h2>
+<h3 id="bug-fixes_9">Bug Fixes</h3>
+<ul>
+<li>output directory detection (#144) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/4042fb517862c650d206b89072cb80fee3fb7308"><code>4042fb5</code></a>)</li>
+<li>pass through log verbosity (#141) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/24ff2833e01e4ba85e5bffd255bc6fcaf0644e85"><code>24ff283</code></a>)</li>
+<li>verify Deadline Cloud render node input exists before submitting (#137) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/415451872c531b3f69849378d716c9c191c07b8c"><code>4154518</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.6.2">View on GitHub</a></p>
+<hr />
+<h2 id="061-2024-05-01">0.6.1 (2024-05-01)</h2>
+<h3 id="bug-fixes_10">Bug Fixes</h3>
+<ul>
+<li>Windows pathmapping rules (#135) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/d24499d503846b6c63c786aa1a4c80890108d03e"><code>d24499d</code></a>)</li>
+<li>improve error message for expired credentials (#131) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/c69ea0bdb40190d286d4e36ccfefc5efb0f1fafd"><code>c69ea0b</code></a>)</li>
+<li>handle directories, references, and unnecessary files (#132) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/0a909b3485966eb177a9088fb5342dcc880db474"><code>0a909b3</code></a>)</li>
+<li>adaptor wheel override (#128) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/f4260e5aff9005422d741421178d737a811ca662"><code>f4260e5</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.6.1">View on GitHub</a></p>
+<hr />
+<h2 id="060-2024-04-01">0.6.0 (2024-04-01)</h2>
+<h3 id="breaking-changes_1">BREAKING CHANGES</h3>
+<ul>
+<li>public release (#104) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/4023c1b629d171b8d435d009c60fe5d85b75e9dc"><code>4023c1b</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_11">Bug Fixes</h3>
+<ul>
+<li>include the adaptor deps in the package (#99) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/c3caa5766310bb49ac87190c24be049829609579"><code>c3caa57</code></a>)</li>
+<li>safely handle potential deps when not submitting step deps (#106) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/99f9285968dbbee1ddf946ddfa503192212b6bec"><code>99f9285</code></a>)</li>
+<li>re-add step dependencies, limit deadline-cloud input nodes, fix single step renders (#105) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/23e4173e730cbe58e2e812b5653e3567685ab8b4"><code>23e4173</code></a>)</li>
+<li>include deps with openjd adaptor package (#103) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/24ffda6c280014584e72e3572e10ba62a10e1b63"><code>24ffda6</code></a>)</li>
+<li>incorrect package name in create adaptor script (#102) (<a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/commit/87f36e3d9e1c10c86068b6d3ffee4b47091fc0b6"><code>87f36e3</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.6.0">View on GitHub</a></p>
+<hr />
+<h2 id="053-2024-03-27">0.5.3 (2024-03-27)</h2>
+<h3 id="bug-fixes_12">Bug Fixes</h3>
+<ul>
+<li>differentiate between required and optional init keys (#100) (<a href="https://github.com/casillas2/deadline-cloud-for-houdini/commit/c2dd76b34be516c0781a370c97e2d353d0f9b7f5"><code>c2dd76b</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.5.3">View on GitHub</a></p>
+<hr />
+<h2 id="052-2024-03-26">0.5.2 (2024-03-26)</h2>
+<h3 id="features_7">Features</h3>
+<ul>
+<li>Additional renderers and Wedge support (#52) (<a href="https://github.com/casillas2/deadline-cloud-for-houdini/commit/cad0931c60b1bc42117ed8d1c3233925ecd42e26"><code>cad0931</code></a>)</li>
+<li>Adds telemetry events to submitter and adaptor (#89) (<a href="https://github.com/casillas2/deadline-cloud-for-houdini/commit/96e3c44e85bda47dfb59fae9580485e1592316c0"><code>96e3c44</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_13">Bug Fixes</h3>
+<ul>
+<li>include deadline-cloud in the adaptor packaging script (#97) (<a href="https://github.com/casillas2/deadline-cloud-for-houdini/commit/fc2cb3d619126fb9ca291ec090fa297b773fe558"><code>fc2cb3d</code></a>)</li>
+<li>throw error on out of bounds wedgenum (#96) (<a href="https://github.com/casillas2/deadline-cloud-for-houdini/commit/cc6aed9a16a1a4152ed625738d351d20a5fbf885"><code>cc6aed9</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.5.2">View on GitHub</a></p>
+<hr />
+<h2 id="051-2024-03-15">0.5.1 (2024-03-15)</h2>
+<h3 id="chores">Chores</h3>
+<ul>
+<li>update deps deadline-cloud 0.40 (#87) (<a href="https://github.com/casillas2/deadline-cloud-for-houdini/commit/92497cf0f3d116249f0c126bbbe30902286dd0b1"><code>92497cf</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.5.1">View on GitHub</a></p>
+<hr />
+<h2 id="050-2024-03-08">0.5.0 (2024-03-08)</h2>
+<h3 id="breaking-changes_2">BREAKING CHANGES</h3>
+<ul>
+<li><strong>deps</strong>: update openjd-adaptor-runtime to 0.5 (#83) (<a href="https://github.com/casillas2/deadline-cloud-for-houdini/commit/d661bdfd993733fdf401a3ffe34c23ba7dc8ca19"><code>d661bdf</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_14">Bug Fixes</h3>
+<ul>
+<li>make 0 the min for failed tasks and retry limit (#79) (<a href="https://github.com/casillas2/deadline-cloud-for-houdini/commit/aeba18620d7f3ac8ba4c177de547f6ace5856b9a"><code>aeba186</code></a>)</li>
+<li>use proper rez syntax for RezPackages (#77) (<a href="https://github.com/casillas2/deadline-cloud-for-houdini/commit/f1cd9287e910d7e47adaff04b782312a36a561be"><code>f1cd928</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.5.0">View on GitHub</a></p>
+<hr />
+<h2 id="040-2024-02-21">0.4.0 (2024-02-21)</h2>
+<h3 id="breaking-changes_3">BREAKING CHANGES</h3>
+<ul>
+<li>Create a script to build adaptor package artifacts (#66) (<a href="https://github.com/casillas2/deadline-cloud-for-houdini/commit/d4f39a2e4bc959e5edb326d42c87e81bdfb6bfa4"><code>d4f39a2</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-houdini/releases/tag/0.4.0">View on GitHub</a></p>
+<hr />
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>

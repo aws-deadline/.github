@@ -1,0 +1,1355 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for AWS Deadline Cloud integrations">
+      
+      
+      
+        <link rel="canonical" href="https://aws-deadline.github.io/blender/releases/">
+      
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../../nuke/">
+      
+      
+      <link rel="icon" href="../../assets/images/logo.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+    
+    
+      
+        <title>Releases - AWS Deadline Cloud Integrations</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#blender-releases" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="AWS Deadline Cloud Integrations" class="md-header__button md-logo" aria-label="AWS Deadline Cloud Integrations" data-md-component="logo">
+      
+  <img src="../../assets/images/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AWS Deadline Cloud Integrations
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Releases
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="AWS Deadline Cloud Integrations" class="md-nav__button md-logo" aria-label="AWS Deadline Cloud Integrations" data-md-component="logo">
+      
+  <img src="../../assets/images/logo.png" alt="logo">
+
+    </a>
+    AWS Deadline Cloud Integrations
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Adobe After Effects
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Adobe After Effects
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../after-effects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../after-effects/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Autodesk 3ds Max
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Autodesk 3ds Max
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../3ds-max/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../3ds-max/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Autodesk Maya
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Autodesk Maya
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../maya/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../maya/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Blender
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Blender
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Foundry Nuke
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Foundry Nuke
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nuke/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nuke/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    KeyShot Studio
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            KeyShot Studio
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../keyshot/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../keyshot/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../keyshot/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Maxon Cinema 4D
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            Maxon Cinema 4D
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cinema-4d/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cinema-4d/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cinema-4d/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    SideFX Houdini
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            SideFX Houdini
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../houdini/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../houdini/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Unreal Engine
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            Unreal Engine
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../unreal-engine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../unreal-engine/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="blender-releases">Blender Releases</h1>
+<h2 id="055-2025-08-06">0.5.5 (2025-08-06)</h2>
+<h3 id="features">Features</h3>
+<ul>
+<li>add Blender 4.5 support to installer and repository (#255) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/c62a4e34316cb0c44d1048fd79a0871306f2deeb"><code>c62a4e3</code></a>)</li>
+<li>Installer now enables the Deadline addon in Blender. (#240) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/4422a7a17952164d5ab98ead5ddcbbbe6e508f38"><code>4422a7a</code></a>)</li>
+</ul>
+<h3 id="bug-fixes">Bug Fixes</h3>
+<ul>
+<li>unnecessary brush assets included as job attachments (#257) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/a99c925191b8fcb077625dca4f2ea4dbbcbce1b3"><code>a99c925</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.5.5">View on GitHub</a></p>
+<hr />
+<h2 id="054-2025-07-02">0.5.4 (2025-07-02)</h2>
+<h3 id="bug-fixes_1">Bug Fixes</h3>
+<ul>
+<li>Installer leaves behind empty tmp directory (#235) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/63a13d79281b658d691ca9a29eabbad2de3774f3"><code>63a13d7</code></a>)</li>
+<li>Asset References on Network Drives are UNC Paths (#231) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/81620228b00c949f0b29e348423d59e381059553"><code>8162022</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.5.4">View on GitHub</a></p>
+<hr />
+<h2 id="053-2025-04-09">0.5.3 (2025-04-09)</h2>
+<h3 id="bug-fixes_2">Bug Fixes</h3>
+<ul>
+<li>"All Renderable Layers" option was rendering every layer in each step when it should only be rendering one layer per step (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/c235b8eb646f63503f27930b23be6dbb6bfb90eb"><code>c235b8e</code></a>)</li>
+</ul>
+<h3 id="experimental">Experimental</h3>
+<p>These changes are experimental and are subject to change without warning
+* Experimental support for installing and updating via Blender extensions (#197) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/9f6b36fc16d117c88ad005f4f3c3bc6e919daa5c"><code>9f6b36f</code></a>)</p>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.5.3">View on GitHub</a></p>
+<hr />
+<h2 id="052-2025-02-13">0.5.2 (2025-02-13)</h2>
+<h3 id="features_1">Features</h3>
+<ul>
+<li>output directory and output file prefix are remembered when submitting the same scene (#188) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/1db21c6617dc3b44f6149df707642b42956fb061"><code>1db21c6</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.5.2">View on GitHub</a></p>
+<hr />
+<h2 id="051-2025-01-14">0.5.1 (2025-01-14)</h2>
+<h3 id="bug-fixes_3">Bug Fixes</h3>
+<ul>
+<li>Fixes published release artifacts</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.5.1">View on GitHub</a></p>
+<hr />
+<h2 id="050-2025-01-13">0.5.0 (2025-01-13)</h2>
+<h3 id="breaking-changes">BREAKING CHANGES</h3>
+<ul>
+<li>The blender-openjd adaptor now requires that gpu_device is specified in init_data. This value can be set to NONE if a GPU is not used.</li>
+</ul>
+<h3 id="features_2">Features</h3>
+<ul>
+<li>Enable GPU rendering from submitter (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/7a4f8bc28f55059b77a6f6d31baa39766fe56c98"><code>7a4f8bc</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_4">Bug Fixes</h3>
+<ul>
+<li>Add OCIO configuration support in SMF (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/3da609b425cb9eab827b87fc0ff5b1179d6e7854"><code>3da609b</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.5.0">View on GitHub</a></p>
+<hr />
+<h2 id="045-2024-12-04">0.4.5 (2024-12-04)</h2>
+<h3 id="features_3">Features</h3>
+<ul>
+<li><strong>adaptor</strong>: Add BLENDER_EXECUTABLE environment variable (#156) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/234c086d3b2626902aba76268f15f3c5e906953d"><code>234c086</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_5">Bug Fixes</h3>
+<ul>
+<li>Apply output file prefixes to submitter GUI (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/876348ac5eb8aec11b784dfe83e7ca46570c4793"><code>876348a</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.4.5">View on GitHub</a></p>
+<hr />
+<h2 id="044-2024-11-21">0.4.4 (2024-11-21)</h2>
+<h3 id="bug-fixes_6">Bug Fixes</h3>
+<ul>
+<li>Handle '//' in output directories (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/985d5a34568706d952d91d43b5910bf9135072e6"><code>985d5a3</code></a>)</li>
+<li>Use user-specified output directories when applicable (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/e6e97ae058e014d98d9212f1280a53edbe4db646"><code>e6e97ae</code></a>)</li>
+<li><strong>adaptor</strong>: eevee render engine rename to BLENDER_EEVEE_NEXT for 4.2 (#139) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/e8480129244c3dc597d20ce06685eab38fc66a84"><code>e848012</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.4.4">View on GitHub</a></p>
+<hr />
+<h2 id="043-2024-10-11">0.4.3 (2024-10-11)</h2>
+<h3 id="bug-fixes_7">Bug Fixes</h3>
+<ul>
+<li>Classify auto-detected assets correctly (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/31f92296ff795c41daee37648add5ab97ea3860d"><code>31f9229</code></a>)</li>
+<li>Enable close button  on the submitter dialog in Blender 4.2 (#127) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/c9582eaa46fa09b9829b3bae2ec390436bf022b7"><code>c9582ea</code></a>)</li>
+<li>Use python-use-system-env to have Blender check PYTHONPATH. (#125) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/c73bbe2058fb2e61e80d8577164bc229790a6e0d"><code>c73bbe2</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.4.3">View on GitHub</a></p>
+<hr />
+<h2 id="042-2024-09-03">0.4.2 (2024-09-03)</h2>
+<h3 id="bug-fixes_8">Bug Fixes</h3>
+<ul>
+<li>correct adaptor override developer option (#117) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/b8be1989dfd745cfc04adde35a70b836da0591b5"><code>b8be198</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.4.2">View on GitHub</a></p>
+<hr />
+<h2 id="041-2024-05-01">0.4.1 (2024-05-01)</h2>
+<h3 id="dependencies">Dependencies</h3>
+<ul>
+<li>Update deadline requirement from ==0.47.<em> to ==0.48.</em> (#100) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/d41cb26a5f0495ae2666cb50701494f6da9c8430"><code>d41cb26</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.4.1">View on GitHub</a></p>
+<hr />
+<h2 id="040-2024-04-17">0.4.0 (2024-04-17)</h2>
+<h3 id="breaking-changes_1">BREAKING CHANGES</h3>
+<ul>
+<li>exclude view layers if not used for rendering (#92) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/fe29282bb5fe041ff0a9508054ebfaa0410b0aad"><code>fe29282</code></a>)</li>
+<li>set frame override and remove job_settings.py (#91) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/7a350bbb60c8340a235ba5fbbd1268df800428c1"><code>7a350bb</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_9">Bug Fixes</h3>
+<ul>
+<li>override frame range checkbox (#90) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/a900d7cff01ef51510f16f427416026a8b431ec8"><code>a900d7c</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.4.0">View on GitHub</a></p>
+<hr />
+<h2 id="030-2024-04-01">0.3.0 (2024-04-01)</h2>
+<h3 id="breaking-changes_2">BREAKING CHANGES</h3>
+<ul>
+<li>public release (#80) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/e5af3b71f90b80f2b932220ffe6a1ce044542528"><code>e5af3b7</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_10">Bug Fixes</h3>
+<ul>
+<li>Prevents the submission dialog from locking Blender on Linux (#81) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/7730b11cf32e0de9756e5c16ee4c349a96e62774"><code>7730b11</code></a>)</li>
+<li>include the adaptor deps in the package (#79) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/fe6f0af9726d10e1bac4c9ad3d3f8500be249e61"><code>fe6f0af</code></a>)</li>
+<li>incorrect package name in create adaptor script (#78) (<a href="https://github.com/aws-deadline/deadline-cloud-for-blender/commit/7b92e91fa1edc6c2974f80971afe93194d745797"><code>7b92e91</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.3.0">View on GitHub</a></p>
+<hr />
+<h2 id="022-2024-03-26">0.2.2 (2024-03-26)</h2>
+<h3 id="features_4">Features</h3>
+<ul>
+<li>swap to qtpy (#75) (<a href="https://github.com/casillas2/deadline-cloud-for-blender/commit/b5c0c3ad09729b63a0431f07a9c2ffa68b7f27f3"><code>b5c0c3a</code></a>)</li>
+<li>Adds telemetry events to submitter and adaptor (#63) (<a href="https://github.com/casillas2/deadline-cloud-for-blender/commit/8f0fb2d85f2c9054eaceb384df1cd4711ec76ed6"><code>8f0fb2d</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_11">Bug Fixes</h3>
+<ul>
+<li>include the adaptor deps in the package (#74) (<a href="https://github.com/casillas2/deadline-cloud-for-blender/commit/ae0990753d0f31dbf8cfd4805191b44661458c9e"><code>ae09907</code></a>)</li>
+<li>include deadline-cloud in the adaptor packaging script (#73) (<a href="https://github.com/casillas2/deadline-cloud-for-blender/commit/9de31469a1485901d40a0993cbee36838c8774fa"><code>9de3146</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.2.2">View on GitHub</a></p>
+<hr />
+<h2 id="021-2024-03-15">0.2.1 (2024-03-15)</h2>
+<h3 id="chores">Chores</h3>
+<ul>
+<li>update deps deadline-cloud 0.40 (#60) (<a href="https://github.com/casillas2/deadline-cloud-for-blender/commit/ced54bfef7bfbcc9743e0f2660942528b326fb6a"><code>cebd1c4</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.2.1">View on GitHub</a></p>
+<hr />
+<h2 id="020-2024-03-08">0.2.0 (2024-03-08)</h2>
+<h3 id="breaking-changes_3">BREAKING CHANGES</h3>
+<ul>
+<li>updated openjd-runtime to 0.5.* (#54) (<a href="https://github.com/casillas2/deadline-cloud-for-blender/commit/3fcc0e8dff8790cb856b8e3e1c86cdeffc6bffea"><code>3fcc0e8</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_12">Bug Fixes</h3>
+<ul>
+<li>remove variables from bl_info (#53) (<a href="https://github.com/casillas2/deadline-cloud-for-blender/commit/4d0cda637d6f66604c86f341ab33d605e70ecdf3"><code>4d0cda6</code></a>)</li>
+<li>adaptor client changes for windows (#47) (<a href="https://github.com/casillas2/deadline-cloud-for-blender/commit/b69a0df940e5eab6631079dbb271e8b18aba4d1f"><code>b69a0df</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.2.0">View on GitHub</a></p>
+<hr />
+<h1 id="changelog">CHANGELOG</h1>
+<h2 id="v011-2024-02-22">v0.1.1 (2024-02-22)</h2>
+<h3 id="fix">Fix</h3>
+<ul>
+<li>fix: create module dir if it doesn&#39;t exist in installation (#43)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.1.1">View on GitHub</a></p>
+<hr />
+<h1 id="changelog_1">CHANGELOG</h1>
+<h2 id="v010-2024-02-21">v0.1.0 (2024-02-21)</h2>
+<h3 id="breaking">Breaking</h3>
+<ul>
+<li>feat!: initial new blender integration (#37)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-blender/releases/tag/0.1.0">View on GitHub</a></p>
+<hr />
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>

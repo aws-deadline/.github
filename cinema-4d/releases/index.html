@@ -1,0 +1,1480 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for AWS Deadline Cloud integrations">
+      
+      
+      
+        <link rel="canonical" href="https://aws-deadline.github.io/cinema-4d/releases/">
+      
+      
+        <link rel="prev" href="../user-guide/">
+      
+      
+        <link rel="next" href="../../houdini/">
+      
+      
+      <link rel="icon" href="../../assets/images/logo.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+    
+    
+      
+        <title>Releases - AWS Deadline Cloud Integrations</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#maxon-cinema-4d-releases" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="AWS Deadline Cloud Integrations" class="md-header__button md-logo" aria-label="AWS Deadline Cloud Integrations" data-md-component="logo">
+      
+  <img src="../../assets/images/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AWS Deadline Cloud Integrations
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Releases
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="AWS Deadline Cloud Integrations" class="md-nav__button md-logo" aria-label="AWS Deadline Cloud Integrations" data-md-component="logo">
+      
+  <img src="../../assets/images/logo.png" alt="logo">
+
+    </a>
+    AWS Deadline Cloud Integrations
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Adobe After Effects
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Adobe After Effects
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../after-effects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../after-effects/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Autodesk 3ds Max
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Autodesk 3ds Max
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../3ds-max/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../3ds-max/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Autodesk Maya
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Autodesk Maya
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../maya/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../maya/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Blender
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Blender
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../blender/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../blender/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Foundry Nuke
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Foundry Nuke
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nuke/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nuke/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    KeyShot Studio
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            KeyShot Studio
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../keyshot/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../keyshot/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../keyshot/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Maxon Cinema 4D
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            Maxon Cinema 4D
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    SideFX Houdini
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            SideFX Houdini
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../houdini/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../houdini/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Unreal Engine
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            Unreal Engine
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../unreal-engine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../unreal-engine/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="maxon-cinema-4d-releases">Maxon Cinema 4D Releases</h1>
+<h2 id="082-2025-08-12">0.8.2 (2025-08-12)</h2>
+<h3 id="features">Features</h3>
+<ul>
+<li>improved render progress reporting (#287) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/d6ab2c034b0c7a22d00c4cb2b41c728760808c75"><code>d6ab2c0</code></a>)</li>
+<li>Implement font handling for Cinema 4D submitter for Windows. (#283) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/f4e4b17054a4c3f69c38c1b67f31a46070bb6eae"><code>f4e4b17</code></a>)</li>
+</ul>
+<h3 id="bug-fixes">Bug Fixes</h3>
+<ul>
+<li>Use scene file location to map path for fonts folder. (#286) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/bb77b8f20c8627ab020552cde91ce6b2b272b302"><code>bb77b8f</code></a>)</li>
+<li>Add the known asset root paths to suppress job submission warnings. (#284) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/350ba4ff9014ae3448857f5f1a58773b607f7e8e"><code>350ba4f</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.8.2">View on GitHub</a></p>
+<hr />
+<h2 id="081-2025-08-07">0.8.1 (2025-08-07)</h2>
+<h3 id="bug-fixes_1">Bug Fixes</h3>
+<ul>
+<li>use blackslashes for Windows paths in submitter installer (#275) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/3d393707a7526258325f286b02b6c04a508d5a52"><code>3d39370</code></a>)</li>
+<li>upgrade deadline version to fix bug where submitter stays open after submission (#276) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/398cd7e5b3c9f1209bd6b6ddbacbf3fc84288043"><code>398cd7e</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.8.1">View on GitHub</a></p>
+<hr />
+<h2 id="080-2025-07-31">0.8.0 (2025-07-31)</h2>
+<h3 id="breaking-changes">BREAKING CHANGES</h3>
+<ul>
+<li>Allow deactivating automatic error checking in Cinema4D jobs (#244) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/1421f72222472eb43d9d21ba9034d686e7789913"><code>1421f72</code></a>)</li>
+<li>Allow deactivating error checking in the Cinema4D adaptor (#245) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/8137c8faa290992b8ec1010368020fa6ab79b4dd"><code>8137c8f</code></a>)</li>
+</ul>
+<p>The init-data schema has changed to support the option to deactivate automatic error checking in the adaptor. If you use Deadline Cloud customer managed fleets, you will need to update your adaptor on the worker before using the latest submitter. The Deadline Cloud service team handles adaptor upgrades on service managed fleets.</p>
+<h3 id="features_1">Features</h3>
+<ul>
+<li>Remember last used shared job settings for job submissions (#235) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/577377a42a32c025268d041715d117565f067d37"><code>577377a</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_2">Bug Fixes</h3>
+<ul>
+<li>Change allowedValues order to match the openjd checkbox specifications (#264) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/ecbe927737081a0cc06d3966e7100059f1596a7e"><code>ecbe927</code></a>)</li>
+<li>remap assets per session instead of per frame (#261) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/004746db0f67d8862c0e097dd27513022afbe620"><code>004746d</code></a>)</li>
+<li>Reduce logging for path mapping. (#258) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/bef03af9a83d0add11f39f09a3abb8cb463acdb0"><code>bef03af</code></a>)</li>
+<li>Save project with assets feature raises exception if all the paths to assets are not found. (#253) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/85a00eba8e2a1164297756010a913d7a52563034"><code>85a00eb</code></a>)</li>
+<li>Path mapping issues on Linux with save project with assets (#252) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/67eff55ea4546c810da64f4bc6d3f8e57e70a7cc"><code>67eff55</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.8.0">View on GitHub</a></p>
+<hr />
+<h2 id="0710-2025-07-07">0.7.10 (2025-07-07)</h2>
+<h3 id="features_2">Features</h3>
+<ul>
+<li>Bundle scene and assets before submission. (#243) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/9a4d11b00a31b2508d03d9b5872263423a1041eb"><code>9a4d11b</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_3">Bug Fixes</h3>
+<ul>
+<li>Use the output paths from the scene file instead of the exported scene. (#249) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/85bb2609d0721a302d3262aedda46addc5419d3e"><code>85bb260</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.7.10">View on GitHub</a></p>
+<hr />
+<h2 id="079-2025-06-26">0.7.9 (2025-06-26)</h2>
+<h3 id="features_3">Features</h3>
+<ul>
+<li>Remember last used output paths and take selection for job submissions (#231) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/91302b7b3539a0f5655b8c7c325f3572abde0de6"><code>91302b7</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_4">Bug Fixes</h3>
+<ul>
+<li>support all takes flow for multi-take/render setting/frame range jobs (#237) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/a107abe534004d5a46bf8d95a360289efffda2d2"><code>a107abe</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.7.9">View on GitHub</a></p>
+<hr />
+<h2 id="078-2025-06-16">0.7.8 (2025-06-16)</h2>
+<h3 id="bug-fixes_5">Bug Fixes</h3>
+<ul>
+<li>Execute passes for scenes to fix pyro caching issue (#232) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/aa4f503d403e7cedeb2f6887bbaf208931625d83"><code>aa4f503</code></a>)</li>
+<li>sdist failed to install (#227) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/662e7264de1010618cfd3cb674d4ea91f22a53a3"><code>662e726</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.7.8">View on GitHub</a></p>
+<hr />
+<h2 id="077-2025-05-23">0.7.7 (2025-05-23)</h2>
+<h3 id="bug-fixes_6">Bug Fixes</h3>
+<ul>
+<li>fix: Assets not found when submitting from macOS and rendering on Windows. (#222) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/c87bdcb2db9ae906d8647d46a008bafbe2a8e559"><code>c87bdcb</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.7.7">View on GitHub</a></p>
+<hr />
+<h2 id="076-2025-05-22">0.7.6 (2025-05-22)</h2>
+<h3 id="bug-fixes_7">Bug Fixes</h3>
+<ul>
+<li>More robust exception handling for RS renderview code. (#219) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/c134d1a47a27dedcd67d8da698eaacc5ccfbb8ef"><code>c134d1a</code></a>)</li>
+<li>Prevent Cinema 4D crashes by opening RS render view during startup. (#218) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/ca6c6303cd324afa3170340a48344c5a9cc7d1c0"><code>ca6c630</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.7.6">View on GitHub</a></p>
+<hr />
+<h2 id="075-2025-05-08">0.7.5 (2025-05-08)</h2>
+<h3 id="bug-fixes_8">Bug Fixes</h3>
+<ul>
+<li>support path mapping for RedShift assets (#211) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/2d9a74bb208de6eba623c36bc407c6facd6b73e7"><code>2d9a74b</code></a>)</li>
+<li>Fix failures with RS RenderView when opening Cinema 4D submitter (#207) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/f714867772f16b281cccb2b15f49b61c34c57db7"><code>f714867</code></a>)</li>
+<li>Allow Cinema 4D to be rendered on all available machines instead of just windows. (#204) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/2ab96aadd260cf7b969ce2c068627419324b773d"><code>2ab96aa</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.7.5">View on GitHub</a></p>
+<hr />
+<h2 id="074-2025-04-10">0.7.4 (2025-04-10)</h2>
+<h3 id="bug-fixes_9">Bug Fixes</h3>
+<ul>
+<li>Add better messaging when Redshift runs out of memory. (#196) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/9dbea2268f4d70afede758f73b1aedceb0d100dd"><code>9dbea22</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.7.4">View on GitHub</a></p>
+<hr />
+<h2 id="073-2025-03-31">0.7.3 (2025-03-31)</h2>
+<h3 id="bug-fixes_10">Bug Fixes</h3>
+<ul>
+<li>Remove 'CRITICAL: Stop' from error regexes in adaptor (#192) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/4a959e8f26c97fe7558ea23f59514a2694014ae0"><code>4a959e8</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.7.3">View on GitHub</a></p>
+<hr />
+<h2 id="072-2025-03-27">0.7.2 (2025-03-27)</h2>
+<h3 id="features_4">Features</h3>
+<ul>
+<li>Add configurable GUI timeouts for jobs in submitter. (#180) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/2b79232739b2561de52b5414b60225f5f7ca82ea"><code>2b79232</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_11">Bug Fixes</h3>
+<ul>
+<li>Avoid checked take from overriding other takes in submission (#185) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/a015719dc93577fc95c7a584b23cd026bbd87fb9"><code>a015719</code></a>)</li>
+<li>Replace C4D tokens with values in paths. (#183) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/d6551334e63241941aa2dfa14316b62b1334ba14"><code>d655133</code></a>)</li>
+<li>Add timeout for Cinema 4D jobs on EnvExit. (#173) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/ce769c0168889c81811d575cfe12b54ddc43d76e"><code>ce769c0</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.7.2">View on GitHub</a></p>
+<hr />
+<h2 id="071-2025-02-05">0.7.1 (2025-02-05)</h2>
+<h3 id="bug-fixes_12">Bug Fixes</h3>
+<ul>
+<li>Use RDATA_FRAMESEQUENCE_CUSTOM only if it exists. (#163) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/7b4fb97021a990d995c42c7e77ac1361981eeab9"><code>7b4fb97</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.7.1">View on GitHub</a></p>
+<hr />
+<h2 id="070-2025-02-03">0.7.0 (2025-02-03)</h2>
+<p><strong>This release has been pulled from PyPI. The use of this release can cause the submitter to fail on Cinema 4D 2024.5.1 version. Downgrade to 0.6.1 or upgrade to the next release if available.</strong></p>
+<h3 id="breaking-changes_1">BREAKING CHANGES</h3>
+<ul>
+<li>handle custom frame ranges (#152) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/c1b1d38bc850c7cfdf421ae3d7b680fb2d54d9f2"><code>c1b1d38</code></a>)</li>
+</ul>
+<p>The function signatures of the <code>Animation</code> and <code>Scene</code> class member functions have been updated to correctly parse frame ranges from Cinema 4D. If you have scripts that directly call the <code>Animation</code> or <code>Scene</code> class member functions, the scripts will need to be updated. </p>
+<h3 id="features_5">Features</h3>
+<ul>
+<li>prepopulate Windows host requirement (#150) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/6673b171f781557be7c47fac9be461098122c204"><code>6673b17</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_13">Bug Fixes</h3>
+<ul>
+<li>improve error handling for sticky settings having a long path (#148) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/99e4d53a0ff4eb820562756201339aac59ce9b3a"><code>99e4d53</code></a>)</li>
+<li>Use Path instead of string in output paths in adaptor template. (#147) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/ab11bdca216e7f1b6be47d31381a565a64a319c9"><code>ab11bdc</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.7.0">View on GitHub</a></p>
+<hr />
+<h2 id="061-2025-01-13">0.6.1 (2025-01-13)</h2>
+<h3 id="bug-fixes_14">Bug Fixes</h3>
+<ul>
+<li>initialize connection to Maxon assets DB on Windows to fix confusing error message (#144) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/f75b68d00ea029723fe573df40b3b78b3adf92fd"><code>f75b68d</code></a>)</li>
+<li>Add error logs for Redshift. (#143) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/46771f333f4c70acc1dfe362a5da55bc321b4e13"><code>46771f3</code></a>)</li>
+<li>Refactor redshift non-ascii test. (#141) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/0691c444df7576a4256c7662e6e6c8b48e1f8ea1"><code>0691c44</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.6.1">View on GitHub</a></p>
+<hr />
+<h2 id="060-2025-01-03">0.6.0 (2025-01-03)</h2>
+<h3 id="breaking-changes_2">BREAKING CHANGES</h3>
+<ul>
+<li><strong>adaptor</strong>: Update adaptor environment variable executable to C4D_COMMANDLINE_EXE (#121) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/206b0add6bd93ab2587508a075b350e53f1f69f1"><code>206b0ad</code></a>)</li>
+</ul>
+<p>The environment variable used to find the Cinema 4D executable in the adaptor was changed from <code>CINEMA4D_ADAPTOR_COMMANDLINE_EXE</code> to <code>C4D_COMMANDLINE_EXECUTABLE</code>. If you were setting the previous variable, you will need to update the environment set up. If you relied on the executable being on the PATH, then no change is required.</p>
+<h3 id="features_6">Features</h3>
+<ul>
+<li>Implement asset path mapping for Cinema 4D scene files (#126) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/33ac2e8c298ac7902b1bdc1c5db87397816e1228"><code>33ac2e8</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_15">Bug Fixes</h3>
+<ul>
+<li>Fix adaptor packaging script to package dependencies. (#137) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/b130cccfba780a5ac540a118feb38c316790c45b"><code>b130ccc</code></a>)</li>
+<li>Tighten error regex pattern. (#136) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/83f0a3c59414fc2c7f440582fdadccb1501b2f4a"><code>83f0a3c</code></a>)</li>
+<li>Ensure stdout/err streams are unbuffered. (#134) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/0b3c05d5c724c63c3a735698e31834b91dbb55e8"><code>0b3c05d</code></a>)</li>
+<li>add path mapping rules to convert Windows paths to C4D's Linux path format (#127) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/8fc40d9cbbd87a9da593d96b11b0d2bf4b6cc406"><code>8fc40d9</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.6.0">View on GitHub</a></p>
+<hr />
+<h2 id="054-2024-11-26">0.5.4 (2024-11-26)</h2>
+<h3 id="bug-fixes_16">Bug Fixes</h3>
+<ul>
+<li>use description from GUI submitter (#115) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/afe039b52430abe9c8e2ecddc9bda97466ac8f81"><code>afe039b</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.5.4">View on GitHub</a></p>
+<hr />
+<h2 id="053-2024-11-22">0.5.3 (2024-11-22)</h2>
+<h3 id="bug-fixes_17">Bug Fixes</h3>
+<ul>
+<li>use user configured installdir for C4D submitter location (#113) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/173297a4918c87386cf7e16b6fa1aa7817239294"><code>173297a</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.5.3">View on GitHub</a></p>
+<hr />
+<h2 id="052-2024-11-21">0.5.2 (2024-11-21)</h2>
+<h3 id="bug-fixes_18">Bug Fixes</h3>
+<ul>
+<li>install C4D plugin into user directory to avoid needing elevated permissions (#110) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/572696cfec82ffcf9acf2e2e80c29c8a2915fc69"><code>572696c</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.5.2">View on GitHub</a></p>
+<hr />
+<h2 id="051-2024-11-20">0.5.1 (2024-11-20)</h2>
+<h3 id="bug-fixes_19">Bug Fixes</h3>
+<ul>
+<li>correct OS conditional for Windows paths (#104) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/748e1f7e24669112f3d9902508aebb12872e036a"><code>748e1f7</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.5.1">View on GitHub</a></p>
+<hr />
+<h2 id="050-2024-11-20">0.5.0 (2024-11-20)</h2>
+<h3 id="breaking-changes_3">BREAKING CHANGES</h3>
+<ul>
+<li>This release contains two breaking changes</li>
+</ul>
+<h3 id="features_7">Features</h3>
+<ul>
+<li>install Conda packages by default (#96) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/8ad8986c6bb073cb572b176b87e85cecd6b091b4"><code>8ad8986</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_20">Bug Fixes</h3>
+<ul>
+<li>use only Windows workers by default (#100) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/88bd6a5c14aa0996ed04cfff452b925d44d17f1c"><code>88bd6a5</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.5.0">View on GitHub</a></p>
+<hr />
+<h2 id="041-2024-11-13">0.4.1 (2024-11-13)</h2>
+<h3 id="bug-fixes_21">Bug Fixes</h3>
+<ul>
+<li>install pip if required before installing GUI dependencies (#91) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/4b5b75af991c94f033bae84ceb061d4d0f1a278a"><code>4b5b75a</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.4.1">View on GitHub</a></p>
+<hr />
+<h2 id="040-2024-11-13">0.4.0 (2024-11-13)</h2>
+<h3 id="breaking-changes_4">BREAKING CHANGES</h3>
+<ul>
+<li>renamed env variable for loading adaptor executable, added support for running the adaptor on Linux, and added support for earlier versions of 2024 (#59) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/be33b63860a2d078f2802766d6eb5ce567c05aba"><code>be33b63</code></a>)</li>
+<li>add adaptor output path mapping and overrides (#55) (#73) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/6dcaf4a35dfb6704bdb4c04b78e76e2e36a43349"><code>6dcaf4a</code></a>)</li>
+</ul>
+<h3 id="features_8">Features</h3>
+<ul>
+<li>Add InstallBuilder submitter installer XML. (#85) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/73dbb7518c04b8d443849f57e9461b4cf14c4d2e"><code>73dbb75</code></a>)</li>
+<li>Only import openjd and deadline modules. (#88) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/71911ae1394203fea36875b1350e4cb4a67470d1"><code>71911ae</code></a>)</li>
+<li>prompt save before submit (#53) (#69) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/c1d463c6c57fdd95c2a3d4e58d024ba3ad58a693"><code>c1d463c</code></a>)</li>
+<li>Add DeadlineCloudSubmitter plugin ID to submitter plugin. (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/9242593455c70ce06cacec94d84839bf957a47cc"><code>9242593</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_22">Bug Fixes</h3>
+<ul>
+<li>Resolve typos in bundling scripts. (#82) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/caf33e3ac3136c311c18069c2fa78628fcddbcfc"><code>caf33e3</code></a>)</li>
+<li>Ensure only Critical stops fail the job and not others. (#80) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/80af90fbf2fe75c4866b26abc8cea5ba66f974ef"><code>80af90f</code></a>)</li>
+<li>Fix python-semantic-release issues with 9.12 (#78) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/8cc9728c52e2e6ea83b2871887299f01124889ff"><code>8cc9728</code></a>)</li>
+<li>handle CRITICAL error in adaptor regex callbacks (#51) (#72) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/817eb68346f165de974dca55033837a07548884b"><code>817eb68</code></a>)</li>
+<li>adaptor handle render result failure results (#66) (#76) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/8e0e1277dd15faa0a8784c95b0fcb43b0505236d"><code>8e0e127</code></a>)</li>
+<li>Add path mapping to outputs (#57) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/056f5ea931b78eea0e21024e192179c7f5d871d8"><code>056f5ea</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.4.0">View on GitHub</a></p>
+<hr />
+<h2 id="034-2024-06-27">0.3.4 (2024-06-27)</h2>
+<h3 id="bug-fixes_23">Bug Fixes</h3>
+<ul>
+<li>frame override checkbox with pyside6 (#54) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/9f3813c65451f073cea4d256817dd2f927b906c0"><code>9f3813c</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.3.4">View on GitHub</a></p>
+<hr />
+<h2 id="033-2024-06-19">0.3.3 (2024-06-19)</h2>
+<h3 id="bug-fixes_24">Bug Fixes</h3>
+<ul>
+<li>properly access multipass filename from render data (#47) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/6da82bf511b4af364b047fd22f678c63230acf92"><code>6da82bf</code></a>)</li>
+<li>windows adaptor was failing to load (#44) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/f5b1c6d76c40811a78cd14cd822872fd47f93488"><code>f5b1c6d</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.3.3">View on GitHub</a></p>
+<hr />
+<h2 id="032-2024-05-08">0.3.2 (2024-05-08)</h2>
+<h3 id="bug-fixes_25">Bug Fixes</h3>
+<ul>
+<li>update imports (#36) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/ef50e5ae7745addcb601b7dc7d91304a4d307dff"><code>ef50e5a</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.3.2">View on GitHub</a></p>
+<hr />
+<h2 id="031-2024-05-01">0.3.1 (2024-05-01)</h2>
+<h3 id="dependencies">Dependencies</h3>
+<ul>
+<li>update deadline requirement from ==0.47.<em> to ==0.48.</em> (#33) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/8e16c437872e81162a79ba2c220397cc180deddb"><code>8e16c43</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.3.1">View on GitHub</a></p>
+<hr />
+<h2 id="030-2024-04-02">0.3.0 (2024-04-02)</h2>
+<h3 id="breaking-changes_5">BREAKING CHANGES</h3>
+<ul>
+<li>public release (#21) (<a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/commit/2fc84affe0206687d08915c8301f0cbd8882f075"><code>2fc84af</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.3.0">View on GitHub</a></p>
+<hr />
+<h2 id="021-2024-03-26">0.2.1 (2024-03-26)</h2>
+<h3 id="dependencies_1">Dependencies</h3>
+<ul>
+<li>update deadline-cloud dependency 0.45.0 (#15) (<a href="https://github.com/casillas2/deadline-cloud-for-cinema-4d/pull/15/commits/3677a7b7e1e73939ecae6987fbdc4bc4842c38ec"><code>3677a7b</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.2.1">View on GitHub</a></p>
+<hr />
+<h2 id="v020-2024-03-15">v0.2.0 (2024-03-15)</h2>
+<h3 id="breaking">Breaking</h3>
+<ul>
+<li>change project naming from ...cinema4d -&gt; ...cinema-4d (#8) (<a href="https://github.com/casillas2/deadline-cloud-for-cinema-4d/commit/676cbab3b6fb10054d4e9c987c137aa40736921f"><code>676cbab</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-cinema-4d/releases/tag/0.2.0">View on GitHub</a></p>
+<hr />
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>

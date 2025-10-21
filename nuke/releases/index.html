@@ -1,0 +1,1368 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for AWS Deadline Cloud integrations">
+      
+      
+      
+        <link rel="canonical" href="https://aws-deadline.github.io/nuke/releases/">
+      
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../../keyshot/">
+      
+      
+      <link rel="icon" href="../../assets/images/logo.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+    
+    
+      
+        <title>Releases - AWS Deadline Cloud Integrations</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#foundry-nuke-releases" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="AWS Deadline Cloud Integrations" class="md-header__button md-logo" aria-label="AWS Deadline Cloud Integrations" data-md-component="logo">
+      
+  <img src="../../assets/images/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AWS Deadline Cloud Integrations
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Releases
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="AWS Deadline Cloud Integrations" class="md-nav__button md-logo" aria-label="AWS Deadline Cloud Integrations" data-md-component="logo">
+      
+  <img src="../../assets/images/logo.png" alt="logo">
+
+    </a>
+    AWS Deadline Cloud Integrations
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Adobe After Effects
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Adobe After Effects
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../after-effects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../after-effects/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Autodesk 3ds Max
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Autodesk 3ds Max
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../3ds-max/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../3ds-max/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Autodesk Maya
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Autodesk Maya
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../maya/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../maya/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Blender
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Blender
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../blender/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../blender/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Foundry Nuke
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Foundry Nuke
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    KeyShot Studio
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            KeyShot Studio
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../keyshot/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../keyshot/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../keyshot/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Maxon Cinema 4D
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            Maxon Cinema 4D
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cinema-4d/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cinema-4d/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cinema-4d/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    SideFX Houdini
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            SideFX Houdini
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../houdini/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../houdini/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Unreal Engine
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            Unreal Engine
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../unreal-engine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../unreal-engine/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="foundry-nuke-releases">Foundry Nuke Releases</h1>
+<h2 id="01813-2025-08-25">0.18.13 (2025-08-25)</h2>
+<h3 id="features">Features</h3>
+<ul>
+<li>Add Linux E2E testing support (#247) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/9f4db5aaacc6ad0b11cb6c8d65398db265dedad1"><code>9f4db5a</code></a>)</li>
+<li>Add Linux E2E testing support (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/9f4db5aaacc6ad0b11cb6c8d65398db265dedad1"><code>9f4db5a</code></a>)</li>
+</ul>
+<h3 id="bug-fixes">Bug Fixes</h3>
+<ul>
+<li>fix behavior of automatic input / output path detection (#254) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/11fd53b2a2e388502d5f224b8a02e9d84fc37af2"><code>11fd53b</code></a>)</li>
+<li>fix behavior of automatic input / output path detection (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/11fd53b2a2e388502d5f224b8a02e9d84fc37af2"><code>11fd53b</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.18.13">View on GitHub</a></p>
+<hr />
+<h2 id="01812-2025-07-19">0.18.12 (2025-07-19)</h2>
+<h3 id="features_1">Features</h3>
+<ul>
+<li>Added Windows E2E test support and uploaded test assets (#243) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/1c95deba1d6dcf299f9f021f22f5afb7fc1723c6"><code>1c95deb</code></a>)</li>
+<li>Added Windows E2E test support and uploaded test assets (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/1c95deba1d6dcf299f9f021f22f5afb7fc1723c6"><code>1c95deb</code></a>)</li>
+<li>Add frame range tests, rewrote QCombobox interactions (#238) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/660379e42607bb50878a57fa9d0c4403a675ac35"><code>660379e</code></a>)</li>
+<li>Add frame range tests, rewrote QCombobox interactions (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/660379e42607bb50878a57fa9d0c4403a675ac35"><code>660379e</code></a>)</li>
+<li>Add OCIO, job attachment tests, and default frame range integration tests (#235) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/97cd39add6f3e78af032781bca4a319beab9637d"><code>97cd39a</code></a>)</li>
+<li>Added OCIO, job attachment tests, and default frame range integration test (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/97cd39add6f3e78af032781bca4a319beab9637d"><code>97cd39a</code></a>)</li>
+<li>Fixed typo in test_default_frame_range error message (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/97cd39add6f3e78af032781bca4a319beab9637d"><code>97cd39a</code></a>)</li>
+<li>Add Custom Settings and Write Node E2E tests (#229) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/806da245a8dd833837619444b194ba79c602c05f"><code>806da24</code></a>)</li>
+<li>Add Custom Settings and Write Node E2E tests (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/806da245a8dd833837619444b194ba79c602c05f"><code>806da24</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_1">Bug Fixes</h3>
+<ul>
+<li>Correct the build installer command for Nuke in development readme (#245) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/f60ce1c23fc0ab4d09af1ebcaeef4e0c2fc3e2ca"><code>f60ce1c</code></a>)</li>
+<li>All Views rendering bug to properly render multiple views instead of repeating first view (#244) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/37c33773f25b41863147661d5eca84190f650040"><code>37c3377</code></a>)</li>
+<li>update override frame range function to correctly trigger frame override text box status (#236) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/5289d57da21475dddf91f134cf2340eb73472b18"><code>5289d57</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.18.12">View on GitHub</a></p>
+<hr />
+<h2 id="01811-2025-07-02">0.18.11 (2025-07-02)</h2>
+<h3 id="features_2">Features</h3>
+<ul>
+<li>support macOS installer for Nuke by fixing user installation path (#228) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/9f5f608fbd4bdef9de58b979cfcb119a7d873c0f"><code>9f5f608</code></a>)</li>
+<li>Nuke Submitter E2E Testing: Implemented the basic workflow validation test with Squish GUI tests, API verification, and output validation (#226) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/cb245fae6c10b1cc29cce11fa4096e182c4022e7"><code>cb245fa</code></a>)</li>
+<li>Squish Initial Commit (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/cb245fae6c10b1cc29cce11fa4096e182c4022e7"><code>cb245fa</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.18.11">View on GitHub</a></p>
+<hr />
+<h2 id="01810-2025-05-17">0.18.10 (2025-05-17)</h2>
+<h3 id="features_3">Features</h3>
+<ul>
+<li>Add support for Nuke 16 (#219) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/f1fc0a12bea583688064aff301a1400ab1bb965f"><code>f1fc0a1</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.18.10">View on GitHub</a></p>
+<hr />
+<h2 id="0189-2025-04-14">0.18.9 (2025-04-14)</h2>
+<h3 id="features_4">Features</h3>
+<ul>
+<li><strong>adaptor</strong>: Update Nuke environment variable to NUKE_EXECUTABLE (#178) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/4af4fffa61a170f1dc2e1ea364f4a75ff43d32d4"><code>4af4fff</code></a>)</li>
+<li>Nuke individual installer setup (#206) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/f6ce5d7c6882333557d41db4adc451c9283355c9"><code>f6ce5d7</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_2">Bug Fixes</h3>
+<ul>
+<li>Add Windows support to GitHub Actions and skip OCIO tests on Win… (#217) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/229617933bc9dc3e4ba93b249b264b145a81c5b1"><code>2296179</code></a>)</li>
+<li>update test_installer.sh permissions to 755 (#215) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/5bd1a7000527c7ac080c2ac766a3892ae1e40674"><code>5bd1a70</code></a>)</li>
+<li>Fix individual installer build process (#210) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/31676473833a41ced78145b5ef95d94f380e616b"><code>3167647</code></a>)</li>
+<li>maintain backward compatibility with NUKE_ADAPTOR_NUKE_EXECUTABLE (#213) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/eeb13906c7923dfe546196dccf2d9326c86d7def"><code>eeb1390</code></a>)</li>
+<li>update changelog template to use correct element keys (#212) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/561b825da5494135aa639a2e6068fffe963f7b60"><code>561b825</code></a>)</li>
+<li>add continue on error option to submitter UI (#208) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/0e1bdb267079081e643a7a96c8813235b1907d47"><code>0e1bdb2</code></a>)</li>
+<li>Update UI labels to use consistent sentence case (#205) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/8e02246ec4cb573eb9bd3d3d93cc0153938e54fd"><code>8e02246</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.18.9">View on GitHub</a></p>
+<hr />
+<h2 id="0188-2024-11-27">0.18.8 (2024-11-27)</h2>
+<h3 id="bug-fixes_3">Bug Fixes</h3>
+<ul>
+<li>Revert &#34;fix: Resolve menu.py not found error when installing via pip (#172)&#34; (#175)(<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/3d3a8e9b3acc77988c0967744d8031ebb12509c1"><code>3d3a8e9</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.18.8">View on GitHub</a></p>
+<hr />
+<h2 id="0187-2024-11-21">0.18.7 (2024-11-21)</h2>
+<h3 id="bug-fixes_4">Bug Fixes</h3>
+<ul>
+<li>Resolve menu.py not found error when installing via pip (#172) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/9364964e50b02cda097df3866fa6c7bc755d7878"><code>9364964</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.18.7">View on GitHub</a></p>
+<hr />
+<h2 id="0186-2024-10-21">0.18.6 (2024-10-21)</h2>
+<h3 id="bug-fixes_5">Bug Fixes</h3>
+<ul>
+<li>Revert &#34;fix: Resolve menu.py not found error when running pip install deadline-cloud-for-nuke -t &lt;folder&gt; (#165)&#34; (#170) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/71b8c8b762f7f3a1999640a4e6a3d646e575146d"><code>71b8c8b</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.18.6">View on GitHub</a></p>
+<hr />
+<h2 id="0185-2024-10-16">0.18.5 (2024-10-16)</h2>
+<h3 id="features_5">Features</h3>
+<ul>
+<li>Handle different OCIO configs in adapter (#168) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/5d55675eab8e17155eb7a5044f9453b473700fb4"><code>5d55675</code></a>)</li>
+<li>Added support for including gizmos in job bundle (#162) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/a0704a359d4e83daade6bf41b1b766886384c37d"><code>a0704a3</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_6">Bug Fixes</h3>
+<ul>
+<li>Add OCIO configuration to Job Environments (#166) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/0eb87cbdb1bf86dff2799b48ba4ef89c70341c21"><code>0eb87cb</code></a>)</li>
+<li>Resolve menu.py not found error when running pip install deadline-cloud-for-nuke -t &lt;folder&gt; (#165) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/82b7eb2d9f509a09c9974ec237a1031f4782847a"><code>82b7eb2</code></a>)</li>
+<li>Update frame range when write node is selected (#161) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/e6398c919ae7faa099f007ad2195732958ac0f9a"><code>e6398c9</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.18.5">View on GitHub</a></p>
+<hr />
+<h2 id="0184-2024-08-12">0.18.4 (2024-08-12)</h2>
+<h3 id="bug-fixes_7">Bug Fixes</h3>
+<ul>
+<li>Update write nodes and views when refeshing the job settings ui (#151) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/1175cc9c4d71bbaeec49d707f40058feb6dba4f9"><code>1175cc9</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.18.4">View on GitHub</a></p>
+<hr />
+<h2 id="0183-2024-05-29">0.18.3 (2024-05-29)</h2>
+<h3 id="features_6">Features</h3>
+<ul>
+<li>add ability to configure timeouts in submission UI (#143) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/4535fa0a9bbd9a05ca1dd204da70e02f62b7c033"><code>4535fa0</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_8">Bug Fixes</h3>
+<ul>
+<li>include adaptor wheels developer option (#142) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/0edc735b2a2f117abddb43d9fc5cfdd013c315f1"><code>0edc735</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.18.3">View on GitHub</a></p>
+<hr />
+<h2 id="0182-2024-05-01">0.18.2 (2024-05-01)</h2>
+<h3 id="bug-fixes_9">Bug Fixes</h3>
+<ul>
+<li>check for movie output regardless of adaptor override (#134) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/0fda9a75338fa30bbe4125bab503b8a6654e7d4f"><code>0fda9a7</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.18.2">View on GitHub</a></p>
+<hr />
+<h2 id="0181-2024-04-02">0.18.1 (2024-04-02)</h2>
+<h3 id="bug-fixes_10">Bug Fixes</h3>
+<ul>
+<li>show the correct supported versions (#129) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/d2e577419269cce3d3c5c3db19423682e57a36bc"><code>d2e5774</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.18.1">View on GitHub</a></p>
+<hr />
+<h2 id="0180-2024-04-01">0.18.0 (2024-04-01)</h2>
+<h3 id="breaking-changes">BREAKING CHANGES</h3>
+<ul>
+<li>public release (#123) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/515891bec7f82da0e8efaab2e6f94adf1a7289b7"><code>515891b</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_11">Bug Fixes</h3>
+<ul>
+<li>include deps with openjd adaptor package (#121) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/fed5129a936522b26bc34d955b03f4d6ccf1387a"><code>fed5129</code></a>)</li>
+<li>include the adaptor deps in the package (#119) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/ca51be5de62d5de1e5c851ce769473be3dacd17b"><code>ca51be5</code></a>)</li>
+<li>incorrect package name in create adaptor script (#120) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/ba2f9f8a37839c382bb19dfadfb548028022c578"><code>ba2f9f8</code></a>)</li>
+<li>set python 3.8 to minimum python version in hatch testing matrix (#123) (<a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/commit/515891bec7f82da0e8efaab2e6f94adf1a7289b7"><code>515891b</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.18.0">View on GitHub</a></p>
+<hr />
+<h2 id="0172-2024-03-26">0.17.2 (2024-03-26)</h2>
+<h3 id="features_7">Features</h3>
+<ul>
+<li>Improve telemetry for submitter and adaptor (#103) (<a href="https://github.com/casillas2/deadline-cloud-for-nuke/commit/0811e0500547326ef9b3d369f1aa3211073c5616"><code>0811e05</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_12">Bug Fixes</h3>
+<ul>
+<li>include deadline-cloud in the adaptor packaging script (#117) (<a href="https://github.com/casillas2/deadline-cloud-for-nuke/commit/9a72baff204d2073c35fdede2dc238c2e6515ee0"><code>9a72baf</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.17.2">View on GitHub</a></p>
+<hr />
+<h2 id="0171-2024-03-15">0.17.1 (2024-03-15)</h2>
+<h3 id="chore">Chore</h3>
+<ul>
+<li>update deps deadline-cloud 0.40 (#107) (<a href="https://github.com/casillas2/deadline-cloud-for-nuke/commit/6503f293c9f9ea7be5a513d84dffd4d4f0c2dc5f"><code>6503f29</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.17.1">View on GitHub</a></p>
+<hr />
+<h2 id="0170-2024-03-08">0.17.0 (2024-03-08)</h2>
+<h3 id="breaking-changes_1">BREAKING CHANGES</h3>
+<ul>
+<li><strong>deps</strong>: update openjd-adaptor-runtime to 0.5 (#100) (<a href="https://github.com/casillas2/deadline-cloud-for-nuke/commit/b01e7f5a2bdcc0b18a39d63737067143b5a126e2"><code>b01e7f5</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.17.0">View on GitHub</a></p>
+<hr />
+<h2 id="0160-2024-02-21">0.16.0 (2024-02-21)</h2>
+<h3 id="breaking-changes_2">BREAKING CHANGES</h3>
+<ul>
+<li>Create a script to build adaptor package artifacts (#85) (<a href="https://github.com/casillas2/deadline-cloud-for-nuke/commit/0039d3607caa0a441d8f12cd3dd5687f26fb1c02"><code>0039d36</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_13">Bug Fixes</h3>
+<ul>
+<li>include description on submission (#89) (<a href="https://github.com/casillas2/deadline-cloud-for-nuke/commit/13b4a56a263d55ef1277711bca8e9a01db78a83a"><code>13b4a56</code></a>)</li>
+<li>prevent menu clash with Deadline10 (#86) (<a href="https://github.com/casillas2/deadline-cloud-for-nuke/commit/d5f3d128b1eed20997959aef6b5f5cb5c9fb0f42"><code>d5f3d12</code></a>)</li>
+<li>use right mode when opening toml file (#83) (<a href="https://github.com/casillas2/deadline-cloud-for-nuke/commit/7097cf37ff71ee23bb054348d7a4967c17255c5f"><code>7097cf3</code></a>)</li>
+<li>libtoml -&gt; tomllib in depsBundle.py (#82) (<a href="https://github.com/casillas2/deadline-cloud-for-nuke/commit/70b3eafff63722232d9568ff4d8ad1f6b3a7f58f"><code>70b3eaf</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-nuke/releases/tag/0.16.0">View on GitHub</a></p>
+<hr />
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>

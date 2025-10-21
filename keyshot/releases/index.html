@@ -1,0 +1,1379 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for AWS Deadline Cloud integrations">
+      
+      
+      
+        <link rel="canonical" href="https://aws-deadline.github.io/keyshot/releases/">
+      
+      
+        <link rel="prev" href="../user-guide/">
+      
+      
+        <link rel="next" href="../../cinema-4d/">
+      
+      
+      <link rel="icon" href="../../assets/images/logo.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+    
+    
+      
+        <title>Releases - AWS Deadline Cloud Integrations</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#keyshot-studio-releases" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="AWS Deadline Cloud Integrations" class="md-header__button md-logo" aria-label="AWS Deadline Cloud Integrations" data-md-component="logo">
+      
+  <img src="../../assets/images/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AWS Deadline Cloud Integrations
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Releases
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="AWS Deadline Cloud Integrations" class="md-nav__button md-logo" aria-label="AWS Deadline Cloud Integrations" data-md-component="logo">
+      
+  <img src="../../assets/images/logo.png" alt="logo">
+
+    </a>
+    AWS Deadline Cloud Integrations
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Adobe After Effects
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Adobe After Effects
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../after-effects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../after-effects/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Autodesk 3ds Max
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Autodesk 3ds Max
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../3ds-max/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../3ds-max/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Autodesk Maya
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Autodesk Maya
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../maya/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../maya/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Blender
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Blender
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../blender/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../blender/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Foundry Nuke
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Foundry Nuke
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nuke/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nuke/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    KeyShot Studio
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            KeyShot Studio
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Maxon Cinema 4D
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            Maxon Cinema 4D
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cinema-4d/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cinema-4d/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cinema-4d/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    SideFX Houdini
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            SideFX Houdini
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../houdini/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../houdini/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Unreal Engine
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            Unreal Engine
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../unreal-engine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../unreal-engine/releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="keyshot-studio-releases">KeyShot Studio Releases</h1>
+<h2 id="050-2025-10-16">0.5.0 (2025-10-16)</h2>
+<h3 id="breaking-changes">Breaking changes</h3>
+<p>This integration no longer requires or includes the <code>deadline-cloud-for-keyshot</code> adaptor package. Instead, the adaptor is packaged with each job submission. The old adaptor will continue to be available in Deadline Cloud's service managed fleets for a short period of time to ensure installs of the old submitter continue to work, but users should upgrade to the new submitter as soon as they are able to. The updated integration supports KeyShot versions 2023, 2024, and 2025.</p>
+<h3 id="features">Features</h3>
+<ul>
+<li>Support KeyShot 2025, remove dependency on adapter package (#238) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/9e8745bcee808d0bab8bea341e5464a7b21b784a"><code>9e8745b</code></a>)</li>
+</ul>
+<h3 id="bug-fixes">Bug Fixes</h3>
+<ul>
+<li>update installer script dependencies and commands (#262) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/6cb4bdfbba0332fb6c803b6b24c0eb0b9848737d"><code>6cb4bdf</code></a>)</li>
+<li>update submitter path for installer, add instructions (#256) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/17ec24917ed5dc4c0328d6da13135e2b683f56fe"><code>17ec249</code></a>)</li>
+<li>update version bump action with new submitter path (#251) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/44557a4b7cfc1e3f5aa233be19d2491cdd616228"><code>44557a4</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.5.0">View on GitHub</a></p>
+<hr />
+<h2 id="043-2025-07-10">0.4.3 (2025-07-10)</h2>
+<h3 id="bug-fixes_1">Bug Fixes</h3>
+<ul>
+<li>Refined KeyShot version mismatch error message (#228) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/ae243c7869cdeec8838bc83ba6143ef13116cf74"><code>ae243c7</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.4.3">View on GitHub</a></p>
+<hr />
+<h2 id="042-2025-07-08">0.4.2 (2025-07-08)</h2>
+<p>0.4.2 has not been released to PyPi due to a confusing KeyShot version mismatch error message.</p>
+<h3 id="bug-fixes_2">Bug Fixes</h3>
+<ul>
+<li>Add error handling for KeyShot version compatibility issues (#225) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/d1f1eba0c09ab51d591f504517e7054fc24ea2a9"><code>d1f1eba</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.4.2">View on GitHub</a></p>
+<hr />
+<h2 id="041-2025-07-01">0.4.1 (2025-07-01)</h2>
+<p>0.4.1 has not been released to PyPi due to a bug caused by KeyShot version mismatches.</p>
+<h3 id="bug-fixes_3">Bug Fixes</h3>
+<ul>
+<li>Fixed override_param_found submitter bug (#221) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/8d822a7045c8b1c0a7976285605a127bd03b9cc8"><code>8d822a7</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.4.1">View on GitHub</a></p>
+<hr />
+<h2 id="040-2025-06-30">0.4.0 (2025-06-30)</h2>
+<p>0.4.0 has not been released to PyPi due to a bug in the submitter. The 0.4.0 adaptor is functionally the same as the 0.4.1 adaptor.</p>
+<h3 id="breaking-changes_1">BREAKING CHANGES</h3>
+<ul>
+<li>Configure GPU rendering with host requirements via GUI (#217) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/6393bffbbaf025c8525b3c06d65f69dd40015bb7"><code>6393bff</code></a>)</li>
+<li>Pass render data to adaptor and automate integration tests (#214) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/20706881e1f93bc1a673db7240965d9228d6b28e"><code>2070688</code></a>)</li>
+</ul>
+<p>The adaptor init data schema has changed to support new features and bugfixes. The 0.4.0 submitter will supply additional init data that will be rejected by adaptors 0.3 and below.</p>
+<h3 id="bug-fixes_4">Bug Fixes</h3>
+<ul>
+<li>turn off viewport rendering to reduce CPU usage (#212) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/39ae2dd06ece58e601885d82e2e36e779fe7d18f"><code>39ae2dd</code></a>)</li>
+<li>Print adaptor version when KeyShot is initialized. (#210) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/96556fd814173d5142d708fce58caf5b210f7c68"><code>96556fd</code></a>)</li>
+<li>add environment enter and exit timeouts (#206) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/dbe9ffc3662f0e07ea70049c2b7b0e93dd3b3b04"><code>dbe9ffc</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.4.0">View on GitHub</a></p>
+<hr />
+<h2 id="032-2025-04-14">0.3.2 (2025-04-14)</h2>
+<h3 id="features_1">Features</h3>
+<ul>
+<li>add individual installer support, including macOS (#190) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/958cb50112604dd387b5ceb47ed106787545be3d"><code>958cb50</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.3.2">View on GitHub</a></p>
+<hr />
+<h2 id="031-2025-02-03">0.3.1 (2025-02-03)</h2>
+<h3 id="bug-fixes_5">Bug Fixes</h3>
+<ul>
+<li>remove lux module being passed as an arg (#167) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/8bde1558766bd29ebf766edc4c119b8f77ac22fd"><code>8bde155</code></a>)</li>
+<li>pause rendering while submitting (#159) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/36170d74235a9789827a3959ef9f9a354738d689"><code>36170d7</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.3.1">View on GitHub</a></p>
+<hr />
+<h2 id="030-2025-01-21">0.3.0 (2025-01-21)</h2>
+<h3 id="breaking-changes_2">BREAKING CHANGES</h3>
+<ul>
+<li>use only Windows workers by default (#145) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/5a6b63551e41be1d964ec30c6cdd3c0cff8c9838"><code>5a6b635</code></a>)</li>
+</ul>
+<p>Linux support for KeyShot on Deadline Cloud is experimental, so KeyShot jobs submitted to Deadline Cloud will default to running only on Windows. To submit to a Linux fleet, you can update the <code>Submit to AWS Deadline Cloud.py</code> script to require a <code>attr.worker.os.family</code> of <code>linux</code> instead of <code>windows</code> <a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/blob/f5de91692296e6f4a8a9cb65ef2aedcf9b88c3a2/src/deadline/keyshot_submitter/Submit%20to%20AWS%20Deadline%20Cloud.py#L170">here</a>.</p>
+<h3 id="features_2">Features</h3>
+<ul>
+<li><strong>adaptor</strong>: Update KeyShot environment variable to KEYSHOT_EXECUTABLE (#144) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/ca50175bace3d2c2ee2d97e653100b81a77d43af"><code>ca50175</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_6">Bug Fixes</h3>
+<ul>
+<li>use utf-8 encoding for file reads and writes to fix utf-8 encoding issues on Windows (#150) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/dc9ec7e6a3d877b2b51070982f6b21d5078360f3"><code>dc9ec7e</code></a>)</li>
+<li>use keyshot-openjd in submitter (#146) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/11286d7b9b187a546607daec42ff2d5257b4036f"><code>11286d7</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.3.0">View on GitHub</a></p>
+<hr />
+<h2 id="022-2024-10-16">0.2.2 (2024-10-16)</h2>
+<h3 id="bug-fixes_7">Bug Fixes</h3>
+<ul>
+<li>downgrade python-semantic-release to fix changelog (#126) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/1cd8331d92abbfc037e4f89dc294d10cbf4639cf"><code>1cd8331</code></a>)</li>
+<li>update installer to locate KeyShot scripts directory in more cases (#123) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/70c1d52833603d7f932897ad2c7484a2f2e3e8ed"><code>70c1d52</code></a>)</li>
+<li>use consistent version strings for Keyshot (#121) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/7a60bcbe604272ea81cf7cc071789db3b75dad4d"><code>7a60bcb</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.2.2">View on GitHub</a></p>
+<hr />
+<h2 id="021-2024-09-05">0.2.1 (2024-09-05)</h2>
+<h3 id="bug-fixes_8">Bug Fixes</h3>
+<ul>
+<li>auto-install GUI dependencies (#114) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/cb9f28f0498db15bda6e5ab9570df50987d56444"><code>cb9f28f</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.2.1">View on GitHub</a></p>
+<hr />
+<h2 id="020-2024-09-04">0.2.0 (2024-09-04)</h2>
+<h3 id="breaking-changes_3">BREAKING CHANGES</h3>
+<ul>
+<li>replace submitter GUI with bundle GUI submit (#93) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/05b74b3844190de7732ff7cbaf3b87fa3d24168a"><code>05b74b3</code></a>)</li>
+</ul>
+<h3 id="features_3">Features</h3>
+<ul>
+<li>speedup KSP extraction on Windows (#112) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/e9e9e3412007f83489994cc87a1041edb3cebb01"><code>e9e9e34</code></a>)</li>
+<li>support ksp bundling (#97) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/df141f5cf821fb455896eea888e0a5075f4e6749"><code>df141f5</code></a>)</li>
+<li>submitter prompts user to save changes before submitting (#101) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/3d56b4759b6763fea5f498fe916d78673351310f"><code>3d56b47</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_9">Bug Fixes</h3>
+<ul>
+<li>add default values for conda packages and channels (#110) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/d3f3adb90798edbc7d3b7a94c06f45bc9b93ece5"><code>d3f3adb</code></a>)</li>
+<li>remove submitter dependencies that aren&#39;t available in KeyShot Python (#111) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/98db5ecd40f20f6748f0c9b36cbc22a1061dac28"><code>98db5ec</code></a>)</li>
+<li>do not show Success status when submission is cancelled (#102) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/fc92d0e3a33db929bd9d8f8814ecfc48827f5998"><code>fc92d0e</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.2.0">View on GitHub</a></p>
+<hr />
+<h2 id="013-2024-06-19">0.1.3 (2024-06-19)</h2>
+<h3 id="features_4">Features</h3>
+<ul>
+<li>add KeyShot 2024 support (#91) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/d6d2dfa6b2758b0acfd8f4c13a5d32bde2a2ca0a"><code>d6d2dfa</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.1.3">View on GitHub</a></p>
+<hr />
+<h2 id="012-2024-05-22">0.1.2 (2024-05-22)</h2>
+<h3 id="features_5">Features</h3>
+<ul>
+<li>swap to qtpy and support pyside6 (#78) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/9fc9bf79f3e5091dd40e7fc0e2d620cc8b46a8e2"><code>9fc9bf7</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.1.2">View on GitHub</a></p>
+<hr />
+<h2 id="011-2024-05-01">0.1.1 (2024-05-01)</h2>
+<h3 id="bug-fixes_10">Bug Fixes</h3>
+<ul>
+<li>update missed renames (#63) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/d5d58b739ee43d3a778ac3e774bfa0975f42bf90"><code>d5d58b7</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.1.1">View on GitHub</a></p>
+<hr />
+<h2 id="010-2024-04-01">0.1.0 (2024-04-01)</h2>
+<h3 id="breaking-changes_4">BREAKING CHANGES</h3>
+<ul>
+<li>public release (#53) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/91378c39e58f6eeadc67900a430c802601852b74"><code>91378c3</code></a>)</li>
+<li>update licensing configuration and instructions (#52) (<a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/commit/f44650e2299864a9dd3dfab28efb2dff89c6d7df"><code>f44650e</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.1.0">View on GitHub</a></p>
+<hr />
+<h2 id="006-2024-03-26">0.0.6 (2024-03-26)</h2>
+<h3 id="features_6">Features</h3>
+<ul>
+<li>Adds telemetry events to submitter and adaptor (#40) (<a href="https://github.com/casillas2/deadline-cloud-for-keyshot/commit/00ff0cd670cef61519851d4c4d91d56b64739585"><code>00ff0cd</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.0.6">View on GitHub</a></p>
+<hr />
+<h2 id="005-2024-03-15">0.0.5 (2024-03-15)</h2>
+<h3 id="chores">Chores</h3>
+<ul>
+<li>update deps deadline-cloud 0.40 (#35) (<a href="https://github.com/casillas2/deadline-cloud-for-keyshot/commit/cebd1c4fdf9633aa0691b517f6b4092264943f69"><code>cebd1c4</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.0.5">View on GitHub</a></p>
+<hr />
+<h2 id="004-2024-03-08">0.0.4 (2024-03-08)</h2>
+<h3 id="features_7">Features</h3>
+<ul>
+<li>add conda packages to keyshot submitter (#27) (<a href="https://github.com/casillas2/deadline-cloud-for-keyshot/commit/f538c1a7765a56955cfb6e57bec35b0551ae9c53"><code>f538c1a</code></a>)</li>
+</ul>
+<h3 id="bug-fixes_11">Bug Fixes</h3>
+<ul>
+<li>update README adaptor instructions (#24) (<a href="https://github.com/casillas2/deadline-cloud-for-keyshot/commit/4b6d20179e0368f57b67d08dacc7376b3364649b"><code>4b6d201</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.0.4">View on GitHub</a></p>
+<hr />
+<h2 id="003-2024-02-22">0.0.3 (2024-02-22)</h2>
+<h3 id="bug-fixes_12">Bug Fixes</h3>
+<ul>
+<li>update openjd-runtime to handle signals (#20) (<a href="https://github.com/casillas2/deadline-cloud-for-keyshot/commit/5f74e9ba7b1dfe17f571f396522eeecf1e967e47"><code>5f74e9b</code></a>)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.0.3">View on GitHub</a></p>
+<hr />
+<h2 id="002-2024-02-21">0.0.2 (2024-02-21)</h2>
+<h1 id="changelog">CHANGELOG</h1>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.0.2">View on GitHub</a></p>
+<hr />
+<h1 id="changelog_1">CHANGELOG</h1>
+<h2 id="v001-2024-02-21">v0.0.1 (2024-02-21)</h2>
+<h3 id="feature">Feature</h3>
+<ul>
+<li>feat: add install builder component (#5)</li>
+</ul>
+<h3 id="fix">Fix</h3>
+<ul>
+<li>fix: layers and video output setting (#6) (<a href="https://github.com/casillas2/deadline-cloud-for-keyshot/commit/68fa5ffe5eccfa0db9a0984992f5c5a3c0095741"><code>68fa5ff</code></a>)</li>
+<li>fix: frame and render output settings (#3)</li>
+</ul>
+<p><a href="https://github.com/aws-deadline/deadline-cloud-for-keyshot/releases/tag/0.0.1">View on GitHub</a></p>
+<hr />
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>
