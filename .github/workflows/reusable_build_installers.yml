@@ -41,8 +41,8 @@ jobs:
           mask-aws-account-id: true
           role-duration-seconds: 3600
         
-      - name: Build Installer Manual
-        if: github.workflow == 'Build Installers'
+      - name: Build Installer Manual (Non-Release)
+        if: github.workflow == 'Build Installers' && inputs.environment != 'release'
         uses: aws-actions/aws-codebuild-run-build@v1
         with:
           project-name: ${{inputs.project_name}}-${{matrix.os}}Installer
@@ -50,8 +50,16 @@ jobs:
           hide-cloudwatch-logs: true
           artifacts-type-override: NO_ARTIFACTS
 
+      - name: Build Installer Manual (Release)
+        if: github.workflow == 'Build Installers' && inputs.environment == 'release'
+        uses: aws-actions/aws-codebuild-run-build@v1
+        with:
+          project-name: ${{inputs.project_name}}-${{matrix.os}}Installer
+          source-version-override: refs/${{inputs.ref_type}}/${{inputs.ref}}
+          hide-cloudwatch-logs: true
+
       - name: Build Installer Release
-        if: github.workflow != 'Build Installers'
+        if: github.workflow != 'Build Installers' && inputs.environment == 'release'
         uses: aws-actions/aws-codebuild-run-build@v1
         with:
           project-name: ${{inputs.project_name}}-${{matrix.os}}Installer
