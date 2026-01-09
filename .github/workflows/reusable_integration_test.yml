@@ -10,8 +10,9 @@ on:
         required: false
         type: string
       environment:
-        required: true
+        required: false
         type: string
+        default: 'mainline'
       os:
         required: true
         type: string
