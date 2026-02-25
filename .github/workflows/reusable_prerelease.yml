@@ -25,7 +25,7 @@ jobs:
 
       - name: Build
         run: |
-          pip install --upgrade hatch
+          pip install --upgrade hatch "virtualenv<21"
           hatch -v build
 
       # A precommit hook into the GitHub Action workflow.
