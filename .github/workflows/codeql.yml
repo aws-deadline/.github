@@ -13,5 +13,6 @@ jobs:
     name: Analysis
     uses: ./.github/workflows/reusable_codeql.yml
     permissions:
+      contents: read
       security-events: write
 

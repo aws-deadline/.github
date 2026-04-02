@@ -19,6 +19,7 @@ jobs:
     name: Analyze (${{inputs.languages}})
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       # required for all workflows
       security-events: write
     steps:
