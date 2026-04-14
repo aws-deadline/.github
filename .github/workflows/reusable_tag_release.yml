@@ -12,6 +12,9 @@ on:
       tag:
         description: "The validated tag"
         value: ${{ jobs.TagRelease.outputs.tag }}
+      build-python-version:
+        description: "The Python version to use for building and publishing packages"
+        value: "3.13"
 
 jobs:
   TagRelease:
