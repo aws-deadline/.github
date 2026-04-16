@@ -14,6 +14,10 @@ on:
       installer_oses:
         required: false
         type: string
+      require_approval:
+        required: false
+        type: boolean
+        default: true
     outputs:
       tag:
         description: "The newly created tag"
@@ -59,7 +63,7 @@ jobs:
   PreRelease:
     needs: UnitTests
     runs-on: ubuntu-latest
-    environment: release
+    environment: ${{ inputs.require_approval && 'release' || 'release-no-approval-required' }}
     outputs: 
       tag: ${{steps.prep-release.outputs.TAG}}
     permissions:
@@ -147,7 +151,7 @@ jobs:
     needs: BuildInstallers
     if: needs.BuildInstallers.result == 'success' || needs.BuildInstallers.result == 'skipped'
     runs-on: ubuntu-latest
-    environment: release
+    environment: ${{ inputs.require_approval && 'release' || 'release-no-approval-required' }}
     name: “Is the Conda Package available in all ProdWaves and have you ran any required manual tests?”
     steps:
       - run: |
@@ -161,7 +165,7 @@ jobs:
     permissions:
       id-token: write
       contents: write
-    environment: release
+    environment: ${{ inputs.require_approval && 'release' || 'release-no-approval-required' }}
     env:
       TAG: ${{needs.PreRelease.outputs.tag}}
     steps:
@@ -219,7 +223,7 @@ jobs:
   ReleaseBuiltInstallers:
     needs: [Release, PreRelease]
     runs-on: ubuntu-latest
-    environment: release
+    environment: ${{ inputs.require_approval && 'release' || 'release-no-approval-required' }}
     if: (needs.Release.result == 'success' && needs.PreRelease.result == 'success') && ${{ inputs.installer_oses }} 
     permissions:
       id-token: write
@@ -251,7 +255,7 @@ jobs:
     needs: [ReleaseBuiltInstallers, PreRelease]
     if: (needs.ReleaseBuiltInstallers.result == 'success' && needs.PreRelease.result == 'success')
     runs-on: ubuntu-latest
-    environment: release
+    environment: ${{ inputs.require_approval && 'release' || 'release-no-approval-required' }}
     permissions:
       id-token: write
     env:
@@ -275,7 +279,7 @@ jobs:
     needs: [PublishToInternal, PreRelease]
     if: (needs.PublishToInternal.result == 'success' && needs.PreRelease.result == 'success')
     runs-on: ubuntu-latest
-    environment: release
+    environment: ${{ inputs.require_approval && 'release' || 'release-no-approval-required' }}
     permissions:
       id-token: write
       contents: read

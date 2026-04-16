@@ -2,6 +2,11 @@ name: 'Publish'
 
 on:
   workflow_call:
+    inputs:
+      require_approval:
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   VerifyCommit:
@@ -29,7 +34,7 @@ jobs:
   Release:
     needs: VerifyCommit
     runs-on: ubuntu-latest
-    environment: release
+    environment: ${{ inputs.require_approval && 'release' || 'release-no-approval-required' }}
     permissions:
       id-token: write
       contents: write
@@ -158,7 +163,7 @@ jobs:
   PublishToInternal:
     needs: Release
     runs-on: ubuntu-latest
-    environment: release
+    environment: ${{ inputs.require_approval && 'release' || 'release-no-approval-required' }}
     permissions:
       id-token: write
     steps:
@@ -178,7 +183,7 @@ jobs:
   PublishToRepository:
     needs: PublishToInternal
     runs-on: ubuntu-latest
-    environment: release
+    environment: ${{ inputs.require_approval && 'release' || 'release-no-approval-required' }}
     permissions:
       id-token: write
       contents: read

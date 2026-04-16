@@ -6,6 +6,10 @@ on:
       tag:
         required: true
         type: string
+      require_approval:
+        required: false
+        type: boolean
+        default: true
 
 
 jobs:
@@ -15,7 +19,7 @@ jobs:
     permissions:
       id-token: write
       contents: write
-    environment: release
+    environment: ${{ inputs.require_approval && 'release' || 'release-no-approval-required' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

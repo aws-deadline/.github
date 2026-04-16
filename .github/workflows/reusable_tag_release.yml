@@ -8,6 +8,10 @@ on:
         required: false
         type: string
         description: "Existing tag to use (optional)"
+      require_approval:
+        required: false
+        type: boolean
+        default: true
     outputs:
       tag:
         description: "The validated tag"
@@ -19,7 +23,7 @@ on:
 jobs:
   TagRelease:
     runs-on: ubuntu-latest
-    environment: release
+    environment: ${{ inputs.require_approval && 'release' || 'release-no-approval-required' }}
     outputs:
       tag: ${{ steps.tag-release.outputs.tag }}
     steps:

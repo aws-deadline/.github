@@ -10,11 +10,15 @@ on:
       project_name:
         required: true
         type: string
+      require_approval:
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   ReleaseInstaller:
     runs-on: ubuntu-latest
-    environment: release
+    environment: ${{ inputs.require_approval && 'release' || 'release-no-approval-required' }}
     permissions:
       id-token: write
     strategy:

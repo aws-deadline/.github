@@ -7,12 +7,16 @@ on:
       force_version_bump:
         required: false
         default: ""
-        type: string        
+        type: string
+      require_approval:
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   Bump:
     runs-on: ubuntu-latest
-    environment: release
+    environment: ${{ inputs.require_approval && 'release' || 'release-no-approval-required' }}
     permissions:
       contents: write
       pull-requests: write
