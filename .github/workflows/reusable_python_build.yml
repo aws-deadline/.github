@@ -1,3 +1,9 @@
+# Caching strategy:
+# - pip download cache and hatch virtualenv cache are always enabled.
+# - The cache key includes OS, Python version, and hashes of all dependency files so it
+#   auto-busts when deps change.
+# - Release artifacts (PyPI packages, installers) are built in separate jobs with clean
+#   environments, so the cache does not affect published artifacts.
 name: Python Build
 
 on:
@@ -28,6 +34,7 @@ jobs:
     env:
       PYTHON: ${{ inputs.python-version }}
       PY_COLORS: 1
+      HATCH_DATA_DIR: ${{ github.workspace }}/.hatch-data
     steps:
     - uses: actions/checkout@v4
       if: ${{ !inputs.branch && !inputs.commit && !inputs.ref }}
@@ -47,7 +54,7 @@ jobs:
       if: ${{ inputs.ref }}
       with:
         ref: ${{ inputs.ref }}
-      
+
     - name: setup ${{ inputs.os }}
       if: inputs.os == 'ubuntu-latest'
       run: |
@@ -56,12 +63,18 @@ jobs:
           libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
           libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0 \
           x11-utils libxcb-cursor0 libopengl0
-        
 
     - name: Set up Python ${{ inputs.python-version }}
       uses: actions/setup-python@v5
       with:
         python-version: ${{ inputs.python-version }}
+        cache: pip
+
+    - name: Restore Hatch environment cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/.hatch-data/env
+        key: hatch-env-${{ inputs.os }}-py${{ inputs.python-version }}-${{ hashFiles('pyproject.toml', 'hatch.toml', 'requirements*.txt') }}
 
     - name: Install Hatch
       run: |
