@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: release
     permissions:
+      id-token: write
       contents: write
       pull-requests: write
     steps:
@@ -24,15 +25,33 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.CI_TOKEN }}
 
+      - name: Checkout release notes script
+        uses: actions/checkout@v4
+        with:
+          repository: aws-deadline/.github
+          ref: mainline
+          path: .dot-github
+          sparse-checkout: .github/scripts/generate_release_notes.py
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: pip install boto3
 
       - name: ConfigureGit
         run: |
           git config --local user.email ${{secrets.EMAIL}}
           git config --local user.name ${{secrets.USER}}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PGP_KEY_SECRET_ROLE }}
+          aws-region: us-west-2
+          mask-aws-account-id: true
 
       - name: NextSemver
         run: |
@@ -56,12 +75,22 @@ jobs:
 
       - name: GenerateChangeLog
         run: |
-          # Grab the new version's changelog and prepend it to the original changelog contents
-          python .github/scripts/get_latest_changelog.py > NEW_LOG.md
+          PREV_TAG=$(git describe --tags --abbrev=0)
+          NOTES=$(python .dot-github/.github/scripts/generate_release_notes.py "$NEXT_SEMVER" --since "$PREV_TAG" --repo "${{ github.event.repository.name }}")
+
+          # Prepend new release notes to the original changelog
+          echo "$NOTES" > NEW_LOG.md
           cat NEW_LOG.md CHANGELOG.bak.md > CHANGELOG.md
           rm NEW_LOG.md
 
           git add CHANGELOG.md
+
+          # Save for PR body
+          {
+            echo 'RELEASE_NOTES<<EOF'
+            echo "$NOTES"
+            echo 'EOF'
+          } >> $GITHUB_ENV
 
       # A precommit hook into the GitHub Action workflow.
       # If the action .github/actions/bump_precommit_hook exists in the repository
@@ -76,12 +105,6 @@ jobs:
       - name: Commit
         run: |
           git commit -sm "chore(release): $NEXT_SEMVER"
-
-          {
-            echo 'RELEASE_NOTES<<EOF'
-            python .github/scripts/get_latest_changelog.py
-            echo EOF
-          } >> $GITHUB_ENV
 
       - name: PushPR
         env:
