@@ -65,6 +65,7 @@ jobs:
           x11-utils libxcb-cursor0 libopengl0
 
     - name: Set up Python ${{ inputs.python-version }}
+      id: setup-python
       uses: actions/setup-python@v5
       with:
         python-version: ${{ inputs.python-version }}
@@ -74,7 +75,11 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ${{ github.workspace }}/.hatch-data/env
-        key: hatch-env-${{ inputs.os }}-py${{ inputs.python-version }}-${{ hashFiles('pyproject.toml', 'hatch.toml', 'requirements*.txt') }}
+        # Include the full patch version so the cache busts when the runner image
+        # rolls to a new patch (e.g. 3.14.4 -> 3.14.5). Otherwise the cached venv's
+        # console-script shebangs point at a removed interpreter and tools like
+        # mypy fail with "command not found".
+        key: hatch-env-${{ inputs.os }}-py${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('pyproject.toml', 'hatch.toml', 'requirements*.txt') }}
 
     - name: Install Hatch
       run: |
