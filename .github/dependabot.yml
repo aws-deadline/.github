@@ -1,0 +1,11 @@
+# Dependabot proposes commit-SHA bumps for the GitHub Actions pinned in this
+# repo's reusable workflows -- including anthropics/claude-code-action in
+# reusable_claude_pr_review.yml. A human reviews the bump here once and every
+# consuming repo picks it up via its @mainline reference, so no per-consumer
+# Dependabot config is needed.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
