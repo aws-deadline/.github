@@ -212,4 +212,4 @@ jobs:
             concise. If you find nothing material, post a short note saying so.
           claude_args: |
             --model ${{ inputs.model_id }}
-            --allowedTools "Read,Glob,Grep,Bash(cat:*),Bash(head:*),Bash(wc:*),Bash(jq:*),Bash(git -C pr-head diff:*),Bash(git -C pr-head log:*),Bash(git -C pr-head show:*),Bash(gh api:*)"
+            --allowedTools "Read,Glob,Grep,Bash(cat:*),Bash(head:*),Bash(wc:*),Bash(jq:*),Bash(git -C pr-head diff:*),Bash(git -C pr-head log:*),Bash(git -C pr-head show:*),Bash(git -C pr-head blame:*),Bash(gh api:*)"
