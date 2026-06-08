@@ -133,6 +133,17 @@ jobs:
           BASE_SHA: ${{ steps.meta.outputs.base_sha }}
         run: git fetch --depth=1 origin "$BASE_SHA"
 
+      # Install the token generator BEFORE any AWS credentials exist in the
+      # environment. Even though the package is version-pinned (see
+      # claude-review-requirements.txt), running its install with no IAM session
+      # present means a compromised release has no role credentials to exfiltrate
+      # at install time. --only-binary blocks arbitrary setup.py execution.
+      - name: Install Bedrock token generator (no AWS creds in env)
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --only-binary :all: \
+            -r .github/workflows/claude-review-requirements.txt
+
       # Assume the OIDC role and mint a Bedrock bearer token in a step that holds
       # the IAM credentials, then unset those credentials before the agent runs.
       # role-duration-seconds bounds the token's lifetime to about an hour.
@@ -148,7 +159,6 @@ jobs:
           AWS_REGION: ${{ inputs.aws_region }}
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet aws-bedrock-token-generator
           TOKEN="$(python3 -c "from aws_bedrock_token_generator import provide_token; import os; print(provide_token(region=os.environ['AWS_REGION']))")"
           # Mask the token so it never appears in logs.
           echo "::add-mask::$TOKEN"

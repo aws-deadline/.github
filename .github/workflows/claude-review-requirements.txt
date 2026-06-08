@@ -1,0 +1,7 @@
+# Pinned build dependency for the Claude PR-review workflow.
+#
+# Version-pinned so the workflow installs a known release rather than whatever
+# is latest at run time. Dependabot's `pip` ecosystem (see ../dependabot.yml)
+# watches this file and proposes version-bump PRs that a human reviews; every
+# consuming repo picks the bump up via its @mainline reference.
+aws-bedrock-token-generator==1.1.0

@@ -9,3 +9,9 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+  # Watches claude-review-requirements.txt so the version-pinned
+  # aws-bedrock-token-generator gets reviewed bump PRs instead of going stale.
+  - package-ecosystem: "pip"
+    directory: "/.github/workflows"
+    schedule:
+      interval: "weekly"
