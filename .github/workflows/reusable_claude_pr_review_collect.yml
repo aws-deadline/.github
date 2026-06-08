@@ -1,56 +1,28 @@
 # Stage 1 of the Claude PR-review integration (the "collect" workflow).
 #
 # This runs on `pull_request`, so for PRs from forks GitHub provides no secrets
-# and a read-only GITHUB_TOKEN. Its only job is to record a small amount of PR
-# metadata (number + base/head SHAs) into an artifact that Stage 2
-# (`reusable_claude_pr_review.yml`) consumes from the `workflow_run` context,
-# where it can run with the secrets needed to call Bedrock and post comments.
+# and a read-only GITHUB_TOKEN. It does no work and produces no artifact: its
+# only purpose is to complete, which fires the workflow_run event that starts
+# Stage 2 (`reusable_claude_pr_review.yml`).
 #
-# The artifact contains only metadata strings -- no diff and no file content --
-# and Stage 2 pins the download to this run, so the two stages stay in sync.
+# Deliberately produces nothing that Stage 2 trusts. Because `pull_request` runs
+# a fork's copy of this file, anything it wrote would be fork-controlled. Stage 2
+# instead derives the PR number, head SHA, and base SHA from the server-populated
+# workflow_run event payload, so a malicious fork cannot redirect the review or
+# its comments to an arbitrary PR/issue in the base repo.
 name: Claude PR Review (collect)
 
 on:
   workflow_call:
-    outputs:
-      artifact_name:
-        description: "Name of the artifact containing PR metadata"
-        value: "claude-pr-review-meta"
 
-# Least privilege: this stage only needs to read the PR to record its metadata.
-permissions:
-  contents: read
-  pull-requests: read
+# No permissions needed: this stage only exists to fire the workflow_run event.
+permissions: {}
 
 jobs:
   collect:
     runs-on: ubuntu-latest
     steps:
-      # Write PR identifiers to a JSON file. These come from the
-      # `github.event.pull_request` payload. Stage 2 uses them for the checkout
-      # SHA, the diff base, and the comment target -- all the same PR.
-      - name: Write PR metadata
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-        run: |
-          mkdir -p ./claude-pr-review-meta
-          # Build the JSON with `jq -n` so each value is encoded as a JSON
-          # string rather than interpolated into the file.
-          jq -n \
-            --arg pr_number "$PR_NUMBER" \
-            --arg head_sha "$HEAD_SHA" \
-            --arg base_sha "$BASE_SHA" \
-            --arg head_repo "$HEAD_REPO" \
-            '{pr_number: $pr_number, head_sha: $head_sha, base_sha: $base_sha, head_repo: $head_repo}' \
-            > ./claude-pr-review-meta/pr_meta.json
-          cat ./claude-pr-review-meta/pr_meta.json
-
-      - name: Upload PR metadata artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: claude-pr-review-meta
-          path: ./claude-pr-review-meta/
-          retention-days: 1
+      # A no-op. Stage 2 reads nothing from this run; it only needs the run to
+      # complete so the workflow_run trigger fires.
+      - name: Trigger review stage
+        run: 'echo "PR event recorded; review runs via workflow_run."'

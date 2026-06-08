@@ -21,12 +21,12 @@ name: Claude PR Review
 on:
   workflow_call:
     inputs:
-      collect_run_id:
-        description: "Id of the Stage-1 (collect) workflow run that triggered this review. Pins the artifact download to that run."
+      head_repository:
+        description: "Full name (owner/repo) of the PR head repository, taken from the trusted workflow_run event payload."
         required: true
         type: string
-      head_repository:
-        description: "Full name (owner/repo) of the PR head repository, taken from the workflow_run event payload."
+      head_sha:
+        description: "PR head commit SHA, taken from the trusted workflow_run event payload. The PR number and base SHA are resolved from this."
         required: true
         type: string
       aws_region:
@@ -54,12 +54,12 @@ on:
         description: "ARN of the OIDC role that can mint a Bedrock bearer token. Kept in a secret so the account id is configured in one place."
         required: true
 
-# Least privilege: read the repo, post PR/issue comments, download the
-# cross-workflow artifact (actions: read), and mint the OIDC token
-# (id-token: write). No write access to contents and no admin scopes.
+# Least privilege: read the repo, post PR/issue comments (pull-requests: write
+# also covers the commits/{sha}/pulls lookup used to resolve the PR), and mint
+# the OIDC token (id-token: write). No write access to contents and no admin
+# scopes.
 permissions:
   contents: read
-  actions: read
   pull-requests: write
   issues: write
   id-token: write
@@ -69,38 +69,44 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
     steps:
-      # Pull the PR metadata produced by Stage 1, pinned to the run that
-      # triggered this workflow so it can only read that run's artifact.
-      - name: Download PR metadata artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: claude-pr-review-meta
-          path: ./pr-context
-          run-id: ${{ inputs.collect_run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      # Parse the PR identifiers and confirm the head repo recorded by Stage 1
-      # matches the workflow_run event payload. Fail closed if they disagree.
-      - name: Parse and validate PR metadata
+      # Resolve the PR from the trusted head SHA in the workflow_run payload --
+      # never from anything Stage 1 produced. Stage 1 runs a fork's copy of the
+      # collect workflow, so any value it emitted would be fork-controlled; in
+      # particular a fork could point the review (and its comments) at an
+      # arbitrary PR/issue number in the base repo. head_repository and head_sha
+      # come from the server-populated workflow_run event and cannot be forged.
+      #
+      # We look up the PRs associated with head_sha, keep only open PRs whose
+      # head repo matches the trusted head_repository, and require exactly one
+      # match. The PR number and base SHA are taken from that PR -- so the
+      # comment target is guaranteed to be the PR that actually contains the
+      # reviewed commit. Force-push/close races resolve to != 1 and fail closed.
+      - name: Resolve and validate PR from trusted head SHA
         id: meta
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ inputs.head_sha }}
           EXPECTED_HEAD_REPO: ${{ inputs.head_repository }}
         run: |
           set -euo pipefail
-          test -f ./pr-context/pr_meta.json
-          PR_NUMBER=$(jq -r '.pr_number' ./pr-context/pr_meta.json)
-          HEAD_SHA=$(jq -r '.head_sha' ./pr-context/pr_meta.json)
-          BASE_SHA=$(jq -r '.base_sha' ./pr-context/pr_meta.json)
-          HEAD_REPO=$(jq -r '.head_repo' ./pr-context/pr_meta.json)
-
-          # Identifiers must be well-formed.
-          [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || { echo "::error::bad pr_number"; exit 1; }
           [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad head_sha"; exit 1; }
-          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad base_sha"; exit 1; }
-          if [[ "$HEAD_REPO" != "$EXPECTED_HEAD_REPO" ]]; then
-            echo "::error::head_repo in artifact ($HEAD_REPO) does not match workflow_run payload ($EXPECTED_HEAD_REPO)"
+
+          # "List pull requests associated with a commit" spans the repo's fork
+          # network. Filter to open PRs whose head repo matches the trusted one.
+          matches=$(gh api "repos/$REPO/commits/$HEAD_SHA/pulls" \
+            --jq "[.[] | select(.state == \"open\" and .head.repo.full_name == \"$EXPECTED_HEAD_REPO\")]")
+
+          count=$(echo "$matches" | jq 'length')
+          if [[ "$count" -ne 1 ]]; then
+            echo "::error::expected exactly 1 open PR for $HEAD_SHA from $EXPECTED_HEAD_REPO, found $count"
             exit 1
           fi
+
+          PR_NUMBER=$(echo "$matches" | jq -r '.[0].number')
+          BASE_SHA=$(echo "$matches" | jq -r '.[0].base.sha')
+          [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || { echo "::error::bad pr_number"; exit 1; }
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad base_sha"; exit 1; }
 
           echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
