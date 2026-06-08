@@ -39,11 +39,6 @@ on:
         required: false
         type: string
         default: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
-      max_turns:
-        description: "Hard cap on agent tool-call iterations."
-        required: false
-        type: string
-        default: "100"
       timeout_minutes:
         description: "Job-level wall-clock cap; a stuck run is killed by the runner."
         required: false
@@ -166,8 +161,8 @@ jobs:
       # The action is pinned by full commit SHA (Dependabot proposes bumps; see
       # dependabot.yml). The agent's tools are limited to read-only inspection
       # plus `gh api` for posting comments -- no arbitrary shell, web access, or
-      # MCP tools -- and runs are bounded by --max-turns. The agent step's env
-      # carries only the Bedrock bearer token and GITHUB_TOKEN.
+      # MCP tools -- and the run is bounded by the job-level timeout-minutes. The
+      # agent step's env carries only the Bedrock bearer token and GITHUB_TOKEN.
       - name: Claude PR review
         uses: anthropics/claude-code-action@0b1b62002952733671bde978d429b50b51c51c85 # v1.0.136
         env:
@@ -207,5 +202,4 @@ jobs:
             concise. If you find nothing material, post a short note saying so.
           claude_args: |
             --model ${{ inputs.model_id }}
-            --max-turns ${{ inputs.max_turns }}
-            --allowedTools "Read,Glob,Grep,Bash(cat:*),Bash(head:*),Bash(wc:*),Bash(jq:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(gh api:*)"
+            --allowedTools "Read,Glob,Grep,Bash(cat:*),Bash(head:*),Bash(wc:*),Bash(jq:*),Bash(git -C pr-head diff:*),Bash(git -C pr-head log:*),Bash(git -C pr-head show:*),Bash(gh api:*)"
