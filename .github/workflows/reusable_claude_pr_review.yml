@@ -44,6 +44,16 @@ on:
         required: false
         type: number
         default: 20
+      tooling_repository:
+        description: "Repo holding this workflow's pinned requirements file. A reusable workflow does not check out its own repo, so the caller names it here. Defaults to the workflow's home repo; overridden only for fork testing."
+        required: false
+        type: string
+        default: "aws-deadline/.github"
+      tooling_ref:
+        description: "Ref of tooling_repository to check the requirements file out from. Defaults to mainline, matching the @mainline reference callers use for this workflow."
+        required: false
+        type: string
+        default: "mainline"
     secrets:
       bedrock_role_arn:
         description: "ARN of the OIDC role that can mint a Bedrock bearer token. Kept in a secret so the account id is configured in one place."
@@ -140,6 +150,22 @@ jobs:
           BASE_SHA: ${{ steps.meta.outputs.base_sha }}
         run: git fetch --depth=1 origin "$BASE_SHA"
 
+      # A reusable workflow does not check out its own repository -- the only
+      # checkout above is the PR head under pr-head/. So the pinned requirements
+      # file that lives alongside this workflow is not on disk. Check out the
+      # tooling repo (this workflow's home repo by default; see tooling_repository
+      # / tooling_ref inputs) into workflow-tooling/ so the install step below can
+      # read the version-pinned requirements file. persist-credentials is false
+      # so no token is left on disk.
+      - name: Check out workflow tooling (pinned requirements)
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.tooling_repository }}
+          ref: ${{ inputs.tooling_ref }}
+          path: workflow-tooling
+          persist-credentials: false
+          submodules: false
+
       # Install the token generator BEFORE any AWS credentials exist in the
       # environment. Even though the package is version-pinned (see
       # claude-review-requirements.txt), running its install with no IAM session
@@ -149,7 +175,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m pip install --quiet --only-binary :all: \
-            -r .github/workflows/claude-review-requirements.txt
+            -r workflow-tooling/.github/workflows/claude-review-requirements.txt
 
       # Assume the OIDC role and mint a Bedrock bearer token in a step that holds
       # the IAM credentials, then unset those credentials before the agent runs.
