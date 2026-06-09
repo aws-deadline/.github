@@ -87,10 +87,17 @@ jobs:
           set -euo pipefail
           [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad head_sha"; exit 1; }
 
-          # "List pull requests associated with a commit" spans the repo's fork
-          # network. Filter to open PRs whose head repo matches the trusted one.
-          matches=$(gh api "repos/$REPO/commits/$HEAD_SHA/pulls" \
-            --jq "[.[] | select(.state == \"open\" and .head.repo.full_name == \"$EXPECTED_HEAD_REPO\")]")
+          # "List pull requests associated with a commit" only reliably returns
+          # PRs whose head commit lives in the queried repo. For a fork PR the
+          # head commit lives in the fork, not the base repo, so querying $REPO
+          # returns nothing -- query the trusted head repo instead. We then pin
+          # the base repo back to $REPO so the resolved PR is guaranteed to
+          # target this repository (the comment target cannot be redirected to a
+          # PR in some other base), and keep only open PRs from the trusted head
+          # repo. Both $EXPECTED_HEAD_REPO and $HEAD_SHA come from the
+          # server-populated workflow_run payload and cannot be forged.
+          matches=$(gh api "repos/$EXPECTED_HEAD_REPO/commits/$HEAD_SHA/pulls" \
+            --jq "[.[] | select(.state == \"open\" and .head.repo.full_name == \"$EXPECTED_HEAD_REPO\" and .base.repo.full_name == \"$REPO\")]")
 
           count=$(echo "$matches" | jq 'length')
           if [[ "$count" -ne 1 ]]; then
