@@ -215,6 +215,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           use_bedrock: "true"
+          # Use the workflow's GITHUB_TOKEN (scoped pull-requests/issues: write by
+          # the caller) for the action's own GitHub calls. Without this the action
+          # falls back to minting a Claude GitHub App installation token, which 401s
+          # ("Claude Code is not installed on this repository") since this design
+          # deliberately does not install that app.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
             You are an automated, advisory code reviewer for a public AWS
             Deadline Cloud open-source repository. Review ONLY the changes in
