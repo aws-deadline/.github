@@ -40,10 +40,10 @@ on:
         type: string
         default: "us.anthropic.claude-opus-4-8"
       timeout_minutes:
-        description: "Job-level wall-clock cap; a stuck run is killed by the runner."
+        description: "Job-level wall-clock cap; a stuck run is killed by the runner. Opus 4.8 with thinking needs more headroom than Sonnet did on large diffs, so this is generous."
         required: false
         type: number
-        default: 20
+        default: 30
       tooling_repository:
         description: "Repo holding this workflow's pinned requirements file. A reusable workflow does not check out its own repo, so the caller names it here. Defaults to the workflow's home repo; overridden only for fork testing."
         required: false
