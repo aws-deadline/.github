@@ -124,6 +124,78 @@ jobs:
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
           echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
 
+      # Collect the state of this bot's prior review comments so the agent can
+      # avoid re-posting findings it already raised on earlier revisions. This is
+      # done here, deterministically and cheaply, rather than spending agent turns
+      # (and scarce wall-clock under the timeout) on API plumbing.
+      #
+      # Every comment this bot posts ends with a hidden marker of the form
+      #   <!-- claude-review fp=<path>::<category>::<symbol> -->
+      # The `fp` (fingerprint) is a constructed string built from stable
+      # attributes of the finding -- NOT a hash and NOT the prose -- so the same
+      # finding yields the same fp on every run even if the wording changes.
+      #
+      # We pull every review thread, read its fp, and classify it:
+      #   - resolved (maintainer hit "Resolve")  -> the finding is addressed
+      #   - live     (not outdated, not resolved) -> still showing on the diff
+      #   - outdated (line gone) and not resolved -> eligible to be re-anchored
+      # The agent must suppress any finding whose fp is resolved OR live, and must
+      # not post a reworded duplicate of any live comment. Only outdated-and-
+      # unresolved findings may be posted again (re-anchored at their new line).
+      # We identify our own comments by the marker, not by login, so this works
+      # identically on forks and upstream.
+      - name: Collect prior review state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ steps.meta.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          # PullRequestReviewThread carries path/line/isResolved/isOutdated and
+          # its comments' bodies -- everything we need to read the fp markers and
+          # classify each thread without a second REST pass.
+          gh api graphql \
+            -f owner="$OWNER" -f repo="$REPO_NAME" -F pr="$PR_NUMBER" \
+            -f query='
+              query($owner:String!,$repo:String!,$pr:Int!){
+                repository(owner:$owner,name:$repo){
+                  pullRequest(number:$pr){
+                    reviewThreads(first:100){
+                      nodes{
+                        isResolved
+                        isOutdated
+                        path
+                        line
+                        comments(first:10){ nodes{ body } }
+                      }
+                    }
+                  }
+                }
+              }' > review-threads.json
+
+          # Extract the fp marker from each thread (first comment that has one),
+          # then split into the suppression set and the live-comment list. A
+          # thread is suppressed unless it is outdated-and-unresolved.
+          jq '
+            [ .data.repository.pullRequest.reviewThreads.nodes[]
+              | . as $t
+              | { isResolved, isOutdated, path, line,
+                  body: (.comments.nodes[0].body // ""),
+                  fp: ( [ .comments.nodes[].body
+                          | capture("claude-review fp=(?<fp>\\S+)") .fp ]
+                        | first // null ) }
+              | select(.fp != null) ]
+            | { suppress:
+                  ( [ .[] | select(((.isOutdated and (.isResolved|not))) | not) | .fp ]
+                    | unique ),
+                live_comments:
+                  [ .[] | select((.isOutdated|not) and (.isResolved|not))
+                    | { path, line, fp, body } ] }
+          ' review-threads.json > prior-review-state.json
+
+          echo "Prior review state: $(jq -c '{suppress: (.suppress|length), live: (.live_comments|length)}' prior-review-state.json)"
+
       # Check out the PR head read-only into a subdirectory. persist-credentials
       # is false so no token is left on disk, submodules are not fetched, and the
       # repo root is left untouched. The agent reads pr-head/ but never runs it.
@@ -254,33 +326,54 @@ jobs:
               post as you go.
             - Do not re-read files you have already read, and do not chase
               exhaustive coverage of a large diff. One careful pass is enough.
-            - If the diff is large enough that you sense you may run out of time,
-              stop early and post a brief PR-level note listing which files you
-              did NOT get to, so a human knows what is still unreviewed. Do this
-              well before you expect to be cut off, not at the last moment.
 
-            Prefer inline (line-item) comments. Anchor every finding that maps
-            to a specific line or hunk to that line as an inline comment, posted
-            as soon as you find it:
+            ── AVOID DUPLICATE COMMENTS ACROSS REVISIONS ──
+            This PR may have been reviewed on an earlier revision. The file
+            `prior-review-state.json` (in your working directory; read it FIRST,
+            before reviewing) records what you already said. Its shape:
+              {
+                "suppress": ["<fp>", ...],          // findings already handled
+                "live_comments": [ { "path", "line", "fp", "body" }, ... ]
+              }
+            Each of your comments is identified by a fingerprint (`fp`) -- a
+            constructed string, NOT a hash:
+              <relative-path>::<category>::<symbol-or-short-slug>
+            e.g. `src/deadline/auth.py::correctness::validate_token`. The same
+            finding must always produce the same fp, so build it only from the
+            file path, the category, and the specific symbol/identifier the
+            finding is about -- never from your wording, which may change.
+
+            Before posting ANY finding:
+            1. Compute its fp. If that fp is in `suppress`, DO NOT post it --
+               you have already raised it (or a maintainer resolved it). Skip
+               silently.
+            2. Even if the fp differs, if any entry in `live_comments` already
+               makes substantially the same point about the same code, DO NOT
+               post a reworded duplicate. Skip it.
+            Only post findings that are genuinely new on this revision.
+
+            ── HOW TO POST: INLINE COMMENTS ONLY ──
+            Post every finding as an inline review comment anchored to a line in
+            the diff -- these are the only comments maintainers can reply to and
+            resolve. NEVER post a PR-level / conversation comment (do not call the
+            `issues/.../comments` endpoint).
               gh api repos/${{ github.repository }}/pulls/${{ steps.meta.outputs.pr_number }}/comments \
                 -f commit_id=${{ steps.meta.outputs.head_sha }} -f path=... -F line=... -f body=...
+            If a finding is genuinely high-level (overall design, architecture,
+            or approach) and does not map to one line, anchor it to the most
+            relevant changed line you can identify; if none is relevant, anchor
+            it to the first changed line of the first changed file. Phrase it as
+            the high-level note it is, but it still lives as an inline thread.
 
-            Post a PR-level (summary) comment ONLY when you have something to say
-            that is genuinely review-level -- a point about the overall design,
-            architecture, or approach that does not belong on any single line:
-              gh api repos/${{ github.repository }}/issues/${{ steps.meta.outputs.pr_number }}/comments -f body=...
-            If you have no such high-level point, do not post a PR-level comment
-            at all -- the inline comments are your whole review.
-
-            Do not repeat yourself between the two. A finding belongs in exactly
-            one place: if it is about a specific line, it is an inline comment and
-            must NOT also be restated in the PR-level comment; the PR-level comment
-            is only for high-level points that are not already covered inline. Do
-            not summarize or list the inline findings in the PR-level comment.
+            Every comment body MUST end with its fingerprint marker on its own
+            last line, exactly:
+              <!-- claude-review fp=<path>::<category>::<symbol> -->
+            This is how the next revision's review recognizes what you already
+            said. The HTML comment is invisible in the rendered comment.
 
             Focus on correctness, security, and clear bugs in the diff. Be
-            concise. If you find nothing material, post a single short PR-level
-            note saying so.
+            concise. If you find nothing new and material to post, do nothing --
+            do not post a "looks good" comment.
           claude_args: |
             --model ${{ inputs.model_id }}
             --allowedTools "Read,Glob,Grep,Bash(cat:*),Bash(head:*),Bash(wc:*),Bash(jq:*),Bash(git -C pr-head diff:*),Bash(git -C pr-head log:*),Bash(git -C pr-head show:*),Bash(git -C pr-head blame:*),Bash(gh api:*)"
