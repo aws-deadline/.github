@@ -15,10 +15,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Create PR info artifact
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_ACTION: ${{ github.event.action }}
         run: |
           mkdir -p ./pr-info
-          echo "${{ github.event.pull_request.number }}" > ./pr-info/pr-number.txt
-          echo "${{ github.event.action }}" > ./pr-info/pr-action.txt
+          echo "$PR_NUMBER" > ./pr-info/pr-number.txt
+          echo "$PR_ACTION" > ./pr-info/pr-action.txt
       
       - name: Upload PR info artifact
         uses: actions/upload-artifact@v4

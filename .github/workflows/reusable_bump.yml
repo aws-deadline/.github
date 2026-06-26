@@ -74,9 +74,11 @@ jobs:
           git checkout -b bump/$NEXT_SEMVER
 
       - name: GenerateChangeLog
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0)
-          NOTES=$(python .dot-github/.github/scripts/generate_release_notes.py "$NEXT_SEMVER" --since "$PREV_TAG" --repo "${{ github.event.repository.name }}")
+          NOTES=$(python .dot-github/.github/scripts/generate_release_notes.py "$NEXT_SEMVER" --since "$PREV_TAG" --repo "$REPO_NAME")
 
           # Prepend new release notes to the original changelog
           echo "$NOTES" > NEW_LOG.md
