@@ -54,10 +54,13 @@ jobs:
           mask-aws-account-id: true
 
       - name: NextSemver
+        env:
+          # Pass inputs via env, not inline ${{ }}, to avoid template injection.
+          FORCE_VERSION_BUMP: ${{ inputs.force_version_bump }}
         run: |
           BUMP_ARGS=""
-          if [[ "${{ inputs.force_version_bump }}" != "" ]]; then
-            BUMP_ARGS="$BUMP_ARGS --${{ inputs.force_version_bump }}"
+          if [[ "$FORCE_VERSION_BUMP" != "" ]]; then
+            BUMP_ARGS="$BUMP_ARGS --$FORCE_VERSION_BUMP"
           fi
 
           # Backup actual changelog to preserve its contents
@@ -111,8 +114,10 @@ jobs:
       - name: PushPR
         env:
           GH_TOKEN: ${{ secrets.CI_TOKEN }}
+          # Pass context via env, not inline ${{ }}, to avoid template injection.
+          BASE_REF: ${{ github.ref_name }}
         run: |
           git push -u origin bump/$NEXT_SEMVER
 
           # Needs "Allow GitHub Actions to create and approve pull requests" under Settings > Actions
-          gh pr create --base ${{ github.ref_name }} --title "chore(release): $NEXT_SEMVER" --body "$RELEASE_NOTES"
+          gh pr create --base "$BASE_REF" --title "chore(release): $NEXT_SEMVER" --body "$RELEASE_NOTES"

@@ -60,12 +60,13 @@ jobs:
       - name: PushRelease
         env:
           GH_TOKEN: ${{ secrets.CI_TOKEN }}
+          # Pass inputs via env, not inline ${{ }}, to avoid template injection.
+          TAG: ${{ inputs.tag }}
         run: |
           RELEASE_NOTES=$(python .github/scripts/get_latest_changelog.py)
-          TAG=${{inputs.tag}}
-      
+
           shopt -s nullglob
-          gh release create $TAG build-artifact/dist/* build-artifact/dist_extras/* --notes "$RELEASE_NOTES" 
+          gh release create "$TAG" build-artifact/dist/* build-artifact/dist_extras/* --notes "$RELEASE_NOTES"
 
 
  

@@ -220,7 +220,7 @@ jobs:
     needs: [Release, PreRelease]
     runs-on: ubuntu-latest
     environment: release
-    if: (needs.Release.result == 'success' && needs.PreRelease.result == 'success') && ${{ inputs.installer_oses }} 
+    if: needs.Release.result == 'success' && needs.PreRelease.result == 'success' && inputs.installer_oses != ''
     permissions:
       id-token: write
     strategy:

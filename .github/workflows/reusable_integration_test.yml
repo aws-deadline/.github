@@ -22,7 +22,7 @@ on:
 
 jobs:
   IntegrationTests:
-    if: (github.repository == 'aws-deadline/${{inputs.repository}}')
+    if: github.repository == format('aws-deadline/{0}', inputs.repository)
     name: Integration Tests
     runs-on: ubuntu-latest
     environment: ${{inputs.environment}}

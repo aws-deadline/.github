@@ -20,15 +20,17 @@ on:
         required: false
         type: boolean
         default: true
-      fail-on-findings:
+      min-severity:
         description: >-
-          Fail the check when findings are present. Defaults to false so the
-          scan is advisory (findings still upload to the Security tab) while the
-          existing backlog is burned down; flip to true per-repo once findings
-          reach zero.
+          Minimum finding severity that fails the check. Findings at or above
+          this level are reported in the step log and fail the job; anything
+          below is not reported. Defaults to 'high' so PRs are gated on serious
+          findings without being red-walled by hygiene noise. Lower it (e.g.
+          'medium') once a repo's high-severity backlog is at zero.
+          One of: unknown, informational, low, medium, high.
         required: false
-        type: boolean
-        default: false
+        type: string
+        default: high
 
 permissions: {}
 
@@ -38,8 +40,9 @@ jobs:
     if: ${{ inputs.zizmor }}
     runs-on: ubuntu-latest
     permissions:
-      # Required for zizmor-action to upload SARIF results to the Security tab.
-      security-events: write
+      # Findings are reported to the step log / PR annotations, not the Security
+      # tab, so no security-events permission is needed.
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -57,9 +60,9 @@ jobs:
           persist-credentials: false
 
       - name: Run zizmor 🌈
-        # While advisory, don't fail the check on findings — SARIF is still
-        # uploaded to the Security tab so results stay visible.
-        continue-on-error: ${{ !inputs.fail-on-findings }}
+        # zizmor exits non-zero when it reports findings, so the job fails on any
+        # finding at or above min-severity. No continue-on-error: the check is a
+        # gate, not advisory.
         uses: zizmorcore/zizmor-action@71321a20a9ded102f6e9ce5718a2fcec2c4f70d8 # v0.5.2
         with:
           # Scope to .github/ so the nested central-config checkout at
@@ -67,3 +70,8 @@ jobs:
           # actions live under .github/, so coverage is complete.
           inputs: .github/
           config: .zizmor-config/zizmor.yml
+          min-severity: ${{ inputs.min-severity }}
+          # Report findings in the run log and as inline PR annotations rather
+          # than uploading SARIF to the Security tab.
+          advanced-security: false
+          annotations: true

@@ -22,7 +22,11 @@ jobs:
     steps:
       - name: Add label to PR
         run: |
-          echo "Adding label '${{ inputs.label_name }}' to PR #${{ inputs.pr_number }}"
-          gh pr edit ${{ inputs.pr_number }} --add-label "${{ inputs.label_name }}" --repo ${{ github.repository }}
+          echo "Adding label '$LABEL_NAME' to PR #$PR_NUMBER"
+          gh pr edit "$PR_NUMBER" --add-label "$LABEL_NAME" --repo "$REPO"
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          # Pass inputs via env, not inline ${{ }}, to avoid template injection.
+          PR_NUMBER: ${{ inputs.pr_number }}
+          LABEL_NAME: ${{ inputs.label_name }}
+          REPO: ${{ github.repository }}

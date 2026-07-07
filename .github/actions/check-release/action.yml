@@ -21,20 +21,22 @@ runs:
     - name: Check if release exists and verify author
       shell: bash
       run: |
-        echo "Checking if release exists for tag ${{ inputs.tag }}..."
-        if gh release view "${{ inputs.tag }}" &> /dev/null; then
-          echo "::error::Release for tag ${{ inputs.tag }} already exists!"
+        echo "Checking if release exists for tag $TAG..."
+        if gh release view "$TAG" &> /dev/null; then
+          echo "::error::Release for tag $TAG already exists!"
           exit 1
         fi
-        
+
         echo "Verifying commit author..."
-        EXPECTED_AUTHOR="${{ inputs.expected_author }}"
         AUTHOR=$(git show -s --format='%ae' HEAD)
         if [[ $AUTHOR != $EXPECTED_AUTHOR ]]; then
           echo "::error::Expected author email to be '$EXPECTED_AUTHOR', but got '$AUTHOR'. Aborting release."
           exit 1
         fi
-        
+
         echo "All checks passed: Tag exists, no release found, and author verified."
       env:
         GH_TOKEN: ${{ github.token }}
+        # Pass inputs via env, not inline ${{ }}, to avoid template injection.
+        TAG: ${{ inputs.tag }}
+        EXPECTED_AUTHOR: ${{ inputs.expected_author }}

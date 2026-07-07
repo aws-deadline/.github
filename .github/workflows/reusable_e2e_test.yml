@@ -21,7 +21,7 @@ on:
 
 jobs:
   E2ETests:
-    if: (github.repository == 'aws-deadline/${{inputs.repository}}')
+    if: github.repository == format('aws-deadline/{0}', inputs.repository)
     name: E2E Tests
     runs-on: ubuntu-latest
     environment: ${{inputs.environment}}
