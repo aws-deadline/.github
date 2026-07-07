@@ -26,14 +26,14 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         if: ${{inputs.branch == 'mainline' || inputs.branch == 'release'}}
         with:
           ref: ${{inputs.branch}}
           
       - name: Configure AWS credentials for release
         if: ${{inputs.branch == 'release'}}
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: ${{ secrets.AWS_CODEBUILD_RELEASE_CANARY_ROLE }}
           aws-region: us-west-2
@@ -42,7 +42,7 @@ jobs:
        
       - name: Configure AWS credentials for mainline
         if: ${{inputs.branch == 'mainline'}}
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: ${{ secrets.AWS_CODEBUILD_MAINLINE_CANARY_ROLE }}
           aws-region: us-west-2
@@ -51,7 +51,7 @@ jobs:
         
       - name: Run Canary for Mainline
         if: ${{inputs.branch == 'mainline'}}
-        uses: aws-actions/aws-codebuild-run-build@v1
+        uses: aws-actions/aws-codebuild-run-build@7e46c3fa1c1f217e26a73712796b1f78938b534b # v1.0.18
         with:
           project-name: ${{inputs.repository}}-${{inputs.branch}}-${{inputs.os}}-canary
           hide-cloudwatch-logs: true
@@ -64,7 +64,7 @@ jobs:
 
       - name: Run Canary for Release
         if: ${{inputs.branch == 'release'}}
-        uses: aws-actions/aws-codebuild-run-build@v1
+        uses: aws-actions/aws-codebuild-run-build@7e46c3fa1c1f217e26a73712796b1f78938b534b # v1.0.18
         with:
           project-name: ${{inputs.repository}}-${{inputs.branch}}-${{inputs.os}}-canary
           source-version-override: refs/heads/release

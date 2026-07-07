@@ -35,7 +35,7 @@ jobs:
       pr_action: ${{ steps.extract-pr-details.outputs.pr_action }}
     steps:
       - name: Download PR artifact
-        uses: actions/github-script@v6
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
         env:
           WORKFLOW_ID: ${{ inputs.record_pr_workflow_id }}
           ARTIFACT_NAME: ${{ inputs.artifact_name }}

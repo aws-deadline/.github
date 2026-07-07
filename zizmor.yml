@@ -1,0 +1,19 @@
+# Central zizmor configuration for all aws-deadline repos.
+#
+# This file lives once in aws-deadline/.github and is consumed by the reusable
+# Security Scan workflow (reusable_security_scan.yml), which passes it to zizmor
+# via --config when scanning each member repo. Editing it here changes policy
+# for every repo on the next run — no per-repo change needed.
+#
+# Docs: https://docs.zizmor.sh/configuration/
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        # Our own reusable workflows and composite actions are referenced by
+        # branch (e.g. @mainline) on purpose: a single central bump then
+        # propagates to every consuming repo. Allow a ref (branch/tag) pin here.
+        aws-deadline/*: ref-pin
+        # Everything third-party MUST be pinned to a full commit SHA. Dependabot
+        # (see .github/dependabot.yml) proposes SHA bumps to keep these current.
+        "*": hash-pin

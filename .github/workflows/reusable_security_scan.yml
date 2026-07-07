@@ -46,8 +46,24 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Fetch central zizmor config
+        # The zizmor.yml policy lives once in aws-deadline/.github and is shared
+        # by every repo, so a single edit there updates policy fleet-wide.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: aws-deadline/.github
+          ref: mainline
+          path: .zizmor-config
+          persist-credentials: false
+
       - name: Run zizmor 🌈
         # While advisory, don't fail the check on findings — SARIF is still
         # uploaded to the Security tab so results stay visible.
         continue-on-error: ${{ !inputs.fail-on-findings }}
         uses: zizmorcore/zizmor-action@71321a20a9ded102f6e9ce5718a2fcec2c4f70d8 # v0.5.2
+        with:
+          # Scope to .github/ so the nested central-config checkout at
+          # .zizmor-config/ is not itself scanned. All workflows and composite
+          # actions live under .github/, so coverage is complete.
+          inputs: .github/
+          config: .zizmor-config/zizmor.yml

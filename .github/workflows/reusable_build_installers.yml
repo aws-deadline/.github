@@ -34,7 +34,7 @@ jobs:
     steps:
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: ${{ secrets.AWS_CODEBUILD_MAINLINE_INSTALLER_ROLE }}
           aws-region: us-west-2
@@ -43,7 +43,7 @@ jobs:
         
       - name: Build Installer Manual (Non-Release)
         if: github.workflow == 'Build Installers' && inputs.environment != 'release'
-        uses: aws-actions/aws-codebuild-run-build@v1
+        uses: aws-actions/aws-codebuild-run-build@7e46c3fa1c1f217e26a73712796b1f78938b534b # v1.0.18
         with:
           project-name: ${{inputs.project_name}}-${{matrix.os}}Installer
           source-version-override: refs/${{inputs.ref_type}}/${{inputs.ref}}
@@ -52,7 +52,7 @@ jobs:
 
       - name: Build Installer Manual (Release)
         if: github.workflow == 'Build Installers' && inputs.environment == 'release'
-        uses: aws-actions/aws-codebuild-run-build@v1
+        uses: aws-actions/aws-codebuild-run-build@7e46c3fa1c1f217e26a73712796b1f78938b534b # v1.0.18
         with:
           project-name: ${{inputs.project_name}}-${{matrix.os}}Installer
           source-version-override: refs/${{inputs.ref_type}}/${{inputs.ref}}
@@ -60,7 +60,7 @@ jobs:
 
       - name: Build Installer Release
         if: github.workflow != 'Build Installers' && inputs.environment == 'release'
-        uses: aws-actions/aws-codebuild-run-build@v1
+        uses: aws-actions/aws-codebuild-run-build@7e46c3fa1c1f217e26a73712796b1f78938b534b # v1.0.18
         with:
           project-name: ${{inputs.project_name}}-${{matrix.os}}Installer
           source-version-override: refs/${{inputs.ref_type}}/${{inputs.ref}}
