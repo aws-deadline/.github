@@ -38,9 +38,9 @@ on:
         description: "Bedrock model id / inference profile to invoke."
         required: false
         type: string
-        default: "us.anthropic.claude-opus-4-8"
+        default: "us.anthropic.claude-opus-5"
       timeout_minutes:
-        description: "Job-level wall-clock cap; a stuck run is killed by the runner. Opus 4.8 with thinking needs more headroom than Sonnet did on large diffs, so this is generous."
+        description: "Job-level wall-clock cap; a stuck run is killed by the runner. Opus 5 with thinking needs more headroom than Sonnet did on large diffs, so this is generous."
         required: false
         type: number
         default: 30
