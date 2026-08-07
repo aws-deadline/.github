@@ -247,12 +247,22 @@ jobs:
 
       # Add the base commit so the agent can compute the review diff with
       # `git diff $BASE_SHA..HEAD`. No PR code is executed.
+      #
+      # The checkout above uses fetch-depth: 0, so the base commit is normally
+      # already present and no fetch is needed. Only fetch when it genuinely is
+      # not: the checkout sets persist-credentials: false (deliberately -- no
+      # token is left on disk for the agent to read), so on a private repo an
+      # unconditional fetch fails with "could not read Username for
+      # 'https://github.com'". Public repos fetch anonymously and never hit this.
       - name: Fetch base commit for diff
         if: steps.meta.outputs.resolved == 'true'
         working-directory: pr-head
         env:
           BASE_SHA: ${{ steps.meta.outputs.base_sha }}
-        run: git fetch --depth=1 origin "$BASE_SHA"
+        run: |
+          set -euo pipefail
+          git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null \
+            || git fetch --depth=1 origin "$BASE_SHA"
 
       # A reusable workflow does not check out its own repository -- the only
       # checkout above is the PR head under pr-head/. So the pinned requirements
