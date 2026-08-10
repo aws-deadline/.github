@@ -19,6 +19,10 @@ on:
       tag:
         required: false
         type: string
+      run_ui_automation:
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   IntegrationTests:
@@ -54,7 +58,9 @@ jobs:
           source-version-override: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || inputs.branch }}
           env-vars-for-codebuild: |
               TEST_TYPE,
-              OPERATING_SYSTEM
+              OPERATING_SYSTEM,
+              RUN_UI_AUTOMATION
         env:
           TEST_TYPE: WHEEL
           OPERATING_SYSTEM: ${{inputs.os}}
+          RUN_UI_AUTOMATION: ${{inputs.run_ui_automation}}
