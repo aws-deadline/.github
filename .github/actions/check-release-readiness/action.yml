@@ -1,0 +1,63 @@
+name: 'Check Release Readiness'
+description: 'Checks whether the latest pending release is available in the Deadline Cloud Conda manifest'
+
+inputs:
+  github-token:
+    description: 'Token used to check whether the GitHub Release already exists'
+    required: true
+  requested-tag:
+    description: 'Specific release tag to check; defaults to the highest version tag'
+    required: false
+    default: ''
+  force-publish:
+    description: 'Allow the caller to route a missing Conda package through an approval gate'
+    required: false
+    default: 'false'
+  manifest-url:
+    description: 'URL of the Deadline Cloud Conda package manifest'
+    required: false
+    default: 'https://downloads.deadlinecloud.amazonaws.com/conda/manifest.json'
+  package-name:
+    description: 'Conda package name to find in the manifest'
+    required: true
+  required-platforms:
+    description: 'Comma-separated Conda platforms that must be published'
+    required: true
+  timeout-days:
+    description: 'Maximum age in days before failure; must be greater than 2'
+    required: false
+    default: '4'
+
+outputs:
+  tag:
+    description: 'Pending release tag, or an empty string when the release is already published'
+    value: ${{ steps.readiness.outputs.tag }}
+  ready:
+    description: 'Whether all required Conda packages are available'
+    value: ${{ steps.readiness.outputs.ready }}
+  status:
+    description: 'Human-readable release readiness status'
+    value: ${{ steps.readiness.outputs.status }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: '3.13'
+
+    - name: Check release readiness
+      id: readiness
+      shell: bash
+      env:
+        CHECK_RELEASE_READINESS: ${{ github.action_path }}/check_release_readiness.py
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        FORCE_PUBLISH: ${{ inputs.force-publish }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        MANIFEST_URL: ${{ inputs.manifest-url }}
+        PACKAGE_NAME: ${{ inputs.package-name }}
+        REQUESTED_TAG: ${{ inputs.requested-tag }}
+        REQUIRED_PLATFORMS: ${{ inputs.required-platforms }}
+        RELEASE_TIMEOUT_DAYS: ${{ inputs.timeout-days }}
+      run: python "$CHECK_RELEASE_READINESS"
