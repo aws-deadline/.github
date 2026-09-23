@@ -34,6 +34,13 @@ jobs:
       id-token: write
       contents: read
     steps:
+      # aws-codebuild-run-build polls the build with these credentials, so the session has to
+      # outlive the build, not just start it. The default is 1 hour and integ builds already run
+      # ~48 min on mainline and ~94 min against a tag, so the poller was dying mid-build with
+      # "The security token included in the request is expired" and failing the job while the
+      # build itself went on to succeed. Every *_IntegOIDCRole allows 10800s, so this needs no
+      # IAM change -- but configure-aws-credentials fails fast if a role's MaxSessionDuration is
+      # lower, so any new caller's role must allow it too.
       - name: Configure AWS credentials for release
         if: ${{inputs.environment == 'release'}}
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
@@ -41,6 +48,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_CODEBUILD_RELEASE_INTEG_ROLE }}
           aws-region: us-west-2
           mask-aws-account-id: true
+          role-duration-seconds: 10800
        
       - name: Configure AWS credentials for mainline
         if: ${{inputs.environment == 'mainline'}}
@@ -49,6 +57,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_CODEBUILD_MAINLINE_INTEG_ROLE }}
           aws-region: us-west-2
           mask-aws-account-id: true
+          role-duration-seconds: 10800
         
       - name: Run Integration Tests
         uses: aws-actions/aws-codebuild-run-build@7e46c3fa1c1f217e26a73712796b1f78938b534b # v1.0.18
