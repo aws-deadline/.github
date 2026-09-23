@@ -117,7 +117,22 @@ jobs:
           # Pass context via env, not inline ${{ }}, to avoid template injection.
           BASE_REF: ${{ github.ref_name }}
         run: |
-          git push -u origin bump/$NEXT_SEMVER
+          # bump/$NEXT_SEMVER is recreated from $BASE_REF on every run, so a leftover branch
+          # from an earlier bump of this same version -- a release PR closed unmerged, then
+          # re-run after $BASE_REF moved on -- has diverged, and a plain push is rejected
+          # non-fast-forward. Forcing is safe because the branch only ever holds this run's
+          # generated release commit. --force-with-lease (not --force) still refuses if the
+          # remote moved after Checkout fetched it, which fetch-depth: 0 above guarantees a
+          # remote-tracking ref for. Deleting the remote branch instead would close any open
+          # release PR for it.
+          git push --force-with-lease -u origin "bump/$NEXT_SEMVER"
 
+          # A closed PR for this head does not block opening a new one, but an open one does,
+          # and the push above has already updated it.
           # Needs "Allow GitHub Actions to create and approve pull requests" under Settings > Actions
-          gh pr create --base "$BASE_REF" --title "chore(release): $NEXT_SEMVER" --body "$RELEASE_NOTES"
+          EXISTING_PR=$(gh pr list --head "bump/$NEXT_SEMVER" --state open --json number --jq '.[0].number // empty')
+          if [[ -n "$EXISTING_PR" ]]; then
+            echo "bump/$NEXT_SEMVER already has open PR #$EXISTING_PR; the push above updated it."
+          else
+            gh pr create --base "$BASE_REF" --title "chore(release): $NEXT_SEMVER" --body "$RELEASE_NOTES"
+          fi
