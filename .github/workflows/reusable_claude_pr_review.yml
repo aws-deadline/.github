@@ -60,13 +60,14 @@ on:
         required: true
 
 # Least privilege: read the repo, post PR/issue comments (pull-requests: write
-# also covers the commits/{sha}/pulls lookup used to resolve the PR), and mint
-# the OIDC token (id-token: write). No write access to contents and no admin
-# scopes.
+# also covers the commits/{sha}/pulls lookup used to resolve the PR), publish
+# this stage's own check run (checks: write), and mint the OIDC token
+# (id-token: write). No write access to contents and no admin scopes.
 permissions:
   contents: read
   pull-requests: write
   issues: write
+  checks: write
   id-token: write
 
 jobs:
@@ -147,6 +148,65 @@ jobs:
           echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
           echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+
+      # Publish this stage's progress as a check run on the PR head.
+      #
+      # Stage 2 runs on workflow_run, and workflow_run runs are never associated
+      # with a pull request -- so none of the work below shows up in the PR's
+      # Checks list. All a maintainer sees is Stage 1's "collect" check going
+      # green in seconds, then review comments trickling in with no indication
+      # that a review is still running (or has died). Stage 1 cannot wait for
+      # this stage either: its completion is what fires the workflow_run event,
+      # so blocking on the review would deadlock.
+      #
+      # A check run created against the head SHA does attach to the PR, so this
+      # is the one honest progress signal available: it opens as in_progress
+      # here and is closed out by the final step below, whatever happens in
+      # between.
+      #
+      # Deliberately NOT a required check in branch protection: it is only
+      # created when a unique open PR resolves, so the clean-skip path above
+      # would leave a required check permanently pending and block the merge.
+      #
+      # Best-effort by design. The check run needs `checks: write`, which a
+      # caller has to grant (a caller's permissions block is the ceiling for a
+      # reusable workflow), so a caller that bumps this workflow without adding
+      # the scope gets a 403 here -- and this is a progress indicator, not the
+      # review. Failing the job over it would mean no review at all. So a
+      # failure warns and leaves `id` empty, which gates the closing step off,
+      # and the review proceeds exactly as it did before this step existed.
+      #
+      # Note the create call requires a GitHub App token: the Checks API rejects
+      # user tokens outright ("You must authenticate via a GitHub App"). The
+      # Actions GITHUB_TOKEN is an installation token, so it qualifies -- but
+      # this step cannot be reproduced by hand with a PAT.
+      - name: Open review check run on the PR head
+        id: check
+        if: steps.meta.outputs.resolved == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ steps.meta.outputs.head_sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          err="$(mktemp)"
+          # Body built with jq rather than -f field=value: the payload nests
+          # (output.title / output.summary) and jq keeps the quoting honest.
+          if ! id=$(jq -n --arg sha "$HEAD_SHA" --arg url "$RUN_URL" '{
+                      name: "Claude PR Review",
+                      head_sha: $sha,
+                      status: "in_progress",
+                      details_url: $url,
+                      output: {
+                        title: "Review in progress",
+                        summary: "Claude is reviewing this revision. Findings are posted as inline comments as they are found, so comments appearing one at a time is expected -- this check completes when the review is done."
+                      }
+                    }' | gh api "repos/$REPO/check-runs" --input - --jq '.id' 2>"$err"); then
+            echo "::warning::Could not open the review check run; continuing without the PR-side progress signal. Does this caller grant checks: write? $(tr -d '\n' < "$err")"
+            exit 0
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
 
       # Collect the state of this bot's prior review comments so the agent can
       # avoid re-posting findings it already raised on earlier revisions. This is
@@ -325,6 +385,7 @@ jobs:
       # MCP tools -- and the run is bounded by the job-level timeout-minutes. The
       # agent step's env carries only the Bedrock bearer token and GITHUB_TOKEN.
       - name: Claude PR review
+        id: review
         if: steps.meta.outputs.resolved == 'true'
         uses: anthropics/claude-code-action@0b1b62002952733671bde978d429b50b51c51c85 # v1.0.136
         env:
@@ -424,3 +485,46 @@ jobs:
           claude_args: |
             --model ${{ inputs.model_id }}
             --allowedTools "Read,Glob,Grep,Bash(cat:*),Bash(head:*),Bash(wc:*),Bash(jq:*),Bash(git -C pr-head diff:*),Bash(git -C pr-head log:*),Bash(git -C pr-head show:*),Bash(git -C pr-head blame:*),Bash(gh api:*)"
+
+      # Close out the check run opened above. always() so the check never sticks
+      # at in_progress: it also runs when the job is cancelled, which is the
+      # common case here (a newer push cancels this run via the caller's
+      # concurrency group, and the job-level timeout-minutes cancels a stuck
+      # run).
+      #
+      # Those two cancellation causes are indistinguishable from the step
+      # outcome, and neither deserves a red check: findings already posted stand
+      # on their own, so both report `neutral` with wording that covers both.
+      # Only a genuine agent-step failure reports `failure`.
+      - name: Close review check run
+        if: always() && steps.check.outputs.id != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          CHECK_ID: ${{ steps.check.outputs.id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          AGENT_OUTCOME: ${{ steps.review.outcome }}
+        run: |
+          set -euo pipefail
+          case "$AGENT_OUTCOME" in
+            success)
+              conclusion=success
+              title="Review complete"
+              detail="Claude finished reviewing this revision. Any findings are posted as inline comments." ;;
+            cancelled)
+              conclusion=neutral
+              title="Review stopped early (superseded or timed out)"
+              detail="The review was cut short -- either a newer push superseded it, or it hit the job time limit. Findings posted before that point still stand; push again to re-review." ;;
+            *)
+              conclusion=failure
+              title="Review did not complete"
+              detail="The review step failed. This says nothing about the change itself -- see the job log." ;;
+          esac
+          # Also best-effort: a failed PATCH would otherwise redden a job whose
+          # review actually succeeded. The check run then ages out on its own.
+          jq -n --arg c "$conclusion" --arg t "$title" --arg d "$detail" --arg url "$RUN_URL" '{
+            status: "completed",
+            conclusion: $c,
+            output: { title: $t, summary: ($d + "\n\nJob log: " + $url) }
+          }' | gh api -X PATCH "repos/$REPO/check-runs/$CHECK_ID" --input - --silent \
+            || echo "::warning::Could not close the review check run $CHECK_ID; it may sit at in_progress until it ages out."
