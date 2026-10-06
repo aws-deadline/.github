@@ -23,13 +23,14 @@
 #   - The first review is a full, thorough pass. Its head commit is recorded
 #     in a summary comment; each later revision is reviewed incrementally
 #     against the last recorded commit: open threads are re-checked (and
-#     marked addressed when fixed), and only newly changed code is reviewed.
+#     resolved when addressed), and only newly changed code is reviewed.
 #   - Findings carry a severity (blocking / should-fix / nit). Nits are posted
 #     only on the full review.
 #   - A sticky summary comment and a "Claude review" commit status report
 #     what is still open, so authors know when the review has settled. The
-#     status needs `statuses: write` from the caller (see below); without it
-#     the summary comment alone carries the signal.
+#     status is set when a review finishes, so a head commit with no status
+#     has not been reviewed yet. It needs `statuses: write` from the caller
+#     (see below); without it the summary comment alone carries the signal.
 name: Claude PR Review
 
 on:
@@ -83,23 +84,46 @@ on:
         description: "ARN of the OIDC role that can mint a Bedrock bearer token. Kept in a secret so the account id is configured in one place."
         required: true
 
-# Permissions are deliberately not declared here: the job inherits exactly what
-# the caller grants. A reusable workflow that declares a permission its caller
-# withholds fails at startup, so declaring `statuses: write` here would break
-# every caller that has not yet granted it. Callers grant, least privilege:
+# Permissions are split across two jobs so the job that runs the model never
+# holds a token that can write anything:
+#   review  runs the agent on the untrusted PR. It declares a read-only token
+#           (plus id-token: write for Bedrock) and hands its results to the
+#           post job as an artifact.
+#   post    validates and posts the results. It declares no permissions, so it
+#           inherits exactly what the caller grants. (A reusable workflow that
+#           declares a permission its caller withholds fails at startup, so
+#           the optional grants below would otherwise break callers that have
+#           not added them.)
+# Callers grant, least privilege:
 #   contents: read        read the repo
 #   pull-requests: write  post review comments and replies (also covers
 #                         the commits/{sha}/pulls lookup used to resolve the PR)
 #   issues: write         post/update the summary comment
 #   id-token: write       mint the OIDC token for Bedrock
 #   statuses: write       optional: set the "Claude review" commit status
-# No write access to contents and no admin scopes. The agent's tools cannot
-# reach GitHub; only the deterministic prepare/post steps use the token.
+#   contents: write       optional, instead of contents: read: resolve review
+#                         threads the review judges addressed (GitHub requires
+#                         it for resolveReviewThread). Only the post job, which
+#                         runs no model, receives it.
+# No admin scopes.
 
 jobs:
   review:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
+    # Read-only: everything this job writes goes through the post job.
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+    outputs:
+      prepared: ${{ steps.prepare.outcome == 'success' }}
+      pr_number: ${{ steps.meta.outputs.pr_number }}
+      head_sha: ${{ steps.meta.outputs.head_sha }}
+      base_sha: ${{ steps.meta.outputs.base_sha }}
+      mode: ${{ steps.prepare.outputs.mode }}
+      prior_sha: ${{ steps.prepare.outputs.prior_sha }}
     steps:
       # Resolve the PR from the trusted head SHA in the workflow_run payload --
       # never from anything Stage 1 produced. Stage 1 runs a fork's copy of the
@@ -263,9 +287,8 @@ jobs:
       # Decide between a full and an incremental review and lay out what the
       # agent reads: the PR diff, the diff since the last reviewed commit, and
       # this bot's open threads. Done here, deterministically, rather than
-      # spending agent turns on API plumbing. Also marks the commit status
-      # pending so authors (and their agents) can see a review is in flight.
-      # See .github/scripts/claude_pr_review.py for the state it reads.
+      # spending agent turns on API plumbing. See
+      # .github/scripts/claude_pr_review.py for the state it reads.
       - name: Prepare review context
         id: prepare
         if: steps.meta.outputs.resolved == 'true'
@@ -339,6 +362,7 @@ jobs:
           # falls back to minting a Claude GitHub App installation token, which 401s
           # ("Claude Code is not installed on this repository") since this design
           # deliberately does not install that app.
+          # This job's token is read-only (see the job's permissions).
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
             You are an automated, advisory code reviewer for a public AWS
@@ -439,24 +463,64 @@ jobs:
             --json-schema '{"type":"object","additionalProperties":false,"required":["findings","resolutions"],"properties":{"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["path","line","severity","category","symbol","body"],"properties":{"path":{"type":"string"},"line":{"type":"integer"},"severity":{"type":"string","enum":["blocking","should-fix","nit"]},"category":{"type":"string"},"symbol":{"type":"string"},"body":{"type":"string"}}}},"resolutions":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["fp","reason"],"properties":{"fp":{"type":"string"},"reason":{"type":"string"}}}}}}'
             --allowedTools "Read,Glob,Grep,Bash(cat:*),Bash(head:*),Bash(wc:*),Bash(jq:*),Bash(git -C pr-head diff:*),Bash(git -C pr-head log:*),Bash(git -C pr-head show:*),Bash(git -C pr-head blame:*)"
 
-      # Validate the agent's findings and post them as one review, mark the
-      # threads it judged addressed, then update the summary comment and the
-      # commit status. Runs after an agent failure or timeout too, to report the
-      # review as unfinished, but not on cancellation, which means a newer push
-      # superseded this run.
-      - name: Post review
+      # Hand the agent's outcome and structured output to the post job,
+      # alongside the diffs and prior state it validates them against. The
+      # output is untrusted model text: it is passed as data via env and
+      # written to a file, never interpolated into a shell command.
+      - name: Save agent output
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          AGENT_OUTCOME: ${{ steps.agent.outcome }}
+          AGENT_OUTPUT: ${{ steps.agent.outputs.structured_output }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$AGENT_OUTCOME" > review-context/agent-outcome
+          printf '%s' "$AGENT_OUTPUT" > review-context/agent-output.json
+
+      - name: Upload review results
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: claude-review-${{ github.run_id }}-${{ github.run_attempt }}
+          path: review-context/
+          retention-days: 1
+          if-no-files-found: error
+
+  # Validate the agent's findings and post them as one review, resolve the
+  # threads it judged addressed, then update the summary comment and the
+  # commit status. Runs after an agent failure or timeout too, to report the
+  # review as unfinished, but not on cancellation, which means a newer push
+  # superseded this run. No permissions block: inherits the caller's grants
+  # (see the top of this file). Runs no model and no PR code.
+  post:
+    needs: review
+    if: ${{ !cancelled() && needs.review.outputs.prepared == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download review results
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: claude-review-${{ github.run_id }}-${{ github.run_attempt }}
+          path: review-context
+
+      - name: Check out workflow tooling (review script)
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.0
+        with:
+          repository: ${{ inputs.tooling_repository }}
+          ref: ${{ inputs.tooling_ref }}
+          path: workflow-tooling
+          persist-credentials: false
+          submodules: false
+
+      - name: Post review
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ steps.meta.outputs.pr_number }}
-          HEAD_SHA: ${{ steps.meta.outputs.head_sha }}
-          BASE_SHA: ${{ steps.meta.outputs.base_sha }}
-          MODE: ${{ steps.prepare.outputs.mode }}
-          PRIOR_SHA: ${{ steps.prepare.outputs.prior_sha }}
-          AGENT_OUTCOME: ${{ steps.agent.outcome }}
-          # Untrusted model output: passed as data via env, parsed and
-          # validated by the script, never interpolated into a shell command.
-          AGENT_OUTPUT: ${{ steps.agent.outputs.structured_output }}
+          PR_NUMBER: ${{ needs.review.outputs.pr_number }}
+          HEAD_SHA: ${{ needs.review.outputs.head_sha }}
+          BASE_SHA: ${{ needs.review.outputs.base_sha }}
+          MODE: ${{ needs.review.outputs.mode }}
+          PRIOR_SHA: ${{ needs.review.outputs.prior_sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: python3 workflow-tooling/.github/scripts/claude_pr_review.py post

@@ -6,13 +6,14 @@ The review agent only reads code and returns its findings as structured output
 (claude-code-action's --json-schema); everything that talks to GitHub lives here
 so it is predictable, testable, and posts no model output it has not validated.
 
-  prepare  Before the agent runs. Reads this bot's prior review threads and its
-           summary comment, decides between a full and an incremental review,
-           writes the diffs and prior state the agent reads, and marks the
-           commit status pending.
-  post     After the agent runs. Validates the agent's findings, posts the
-           new findings as one batched review, marks threads the agent judged
-           addressed, then updates the summary comment and the commit status.
+  prepare  Before the agent runs, in the read-only review job. Reads this
+           bot's prior review threads and its summary comment, decides between
+           a full and an incremental review, and writes the diffs and prior
+           state the agent reads.
+  post     After the agent runs, in the separate post job. Validates the
+           agent's findings, posts the new findings as one batched review,
+           resolves threads the agent judged addressed, then updates the
+           summary comment and the commit status.
 
 Each review comment ends with a hidden marker
   <!-- claude-review fp=<path>::<category>::<symbol> sev=<severity> -->
@@ -22,11 +23,12 @@ same finding yields the same fp on every revision. The summary comment carries
 recording the last head commit that was fully reviewed; the next revision is
 reviewed incrementally against it.
 
-A thread the agent judges addressed gets a bot reply ending in
+A thread the agent judges addressed gets a bot reply giving the reason, ending
+in
   <!-- claude-review addressed -->
-and from then on counts as closed, like a resolved thread. (GitHub only lets a
-token with `contents: write` resolve review threads, which this workflow does
-not request; a maintainer can still click Resolve to collapse it.)
+and is then resolved. GitHub only lets a token with `contents: write` resolve
+review threads; without that grant the reply alone marks the thread, which
+from then on counts as closed just like a resolved one.
 
 All inputs come from environment variables set by the workflow; see main().
 """
@@ -372,8 +374,8 @@ def render_summary(
         f"{headline}\n\n"
         f"Open: **{counts['blocking']} blocking** · {counts['should-fix']} should-fix · {counts['nit']} nit. {state}".rstrip()
         + "\n\n"
-        "<sub>Fix or reply to each thread; the next revision's review re-checks open threads and marks "
-        "those it agrees are handled as addressed. Resolving a thread also closes it. Later revisions review only "
+        "<sub>Fix or reply to each thread; the next revision's review re-checks open threads and resolves "
+        "those it agrees are handled. Resolving a thread yourself also closes it. Later revisions review only "
         "what changed.</sub>\n\n"
         f"<!-- claude-review-summary reviewed={reviewed_sha or 'none'} -->"
     )
@@ -514,7 +516,6 @@ def pr_diff_base(env: Env) -> str:
 
 def prepare(env: Env) -> None:
     env.context_dir.mkdir(parents=True, exist_ok=True)
-    set_status(env.repo, env.head_sha, "pending", "Reviewing…", env.run_url)
 
     threads = fetch_threads(env.repo, env.pr)
     summary = fetch_summary(env.repo, env.pr)
@@ -582,20 +583,37 @@ def post_review(env: Env, findings: list[Finding]) -> int:
     return posted
 
 
-def mark_addressed(env: Env, threads: list[Thread], resolutions: list[Resolution]) -> int:
+RESOLVE_MUTATION = "mutation($id:ID!){ resolveReviewThread(input:{threadId:$id}){ thread{ isResolved } } }"
+
+
+def close_addressed(env: Env, threads: list[Thread], resolutions: list[Resolution]) -> int:
+    """Reply with the reason and resolve each thread the agent judged addressed.
+
+    The marked reply is what counts; resolving is best effort and needs
+    `contents: write` from the caller. After the first refusal the remaining
+    threads are only marked, rather than repeating a call that will fail.
+    """
     by_fp: dict[str, list[Thread]] = {}
     for t in threads:
         if not t.is_resolved and t.first_comment_id:
             by_fp.setdefault(t.fp, []).append(t)
     done = 0
+    can_resolve = True
     for r in resolutions:
         for t in by_fp.pop(r.fp, []):
             if gh(
                 f"repos/{env.repo}/pulls/{env.pr}/comments/{t.first_comment_id}/replies",
                 "-f", f"body=Addressed: {r.reason}\n\n{ADDRESSED_MARKER}",
                 check=False,
-            ) is not None:
-                done += 1
+            ) is None:
+                continue
+            done += 1
+            if can_resolve and gh("graphql", "-f", f"query={RESOLVE_MUTATION}", "-f", f"id={t.id}", check=False) is None:
+                can_resolve = False
+                print(
+                    "::notice::Could not resolve review threads; grant `contents: write` to let the review "
+                    "resolve threads it marks addressed."
+                )
     return done
 
 
@@ -621,7 +639,7 @@ def post(env: Env, *, agent_ok: bool, agent_output: str, mode: str, prior_sha: s
 
     posted = post_review(env, findings)
     threads = fetch_threads(env.repo, env.pr)
-    resolved = mark_addressed(env, threads, resolutions) if resolutions else 0
+    resolved = close_addressed(env, threads, resolutions) if resolutions else 0
     if resolved:
         threads = fetch_threads(env.repo, env.pr)
     counts = open_counts(threads)
@@ -662,10 +680,14 @@ def main(argv: list[str]) -> None:
         prior = os.environ.get("PRIOR_SHA") or None
         if prior is not None and not SHA_RE.match(prior):
             prior = None
+        # The review job hands the agent's outcome and structured output over
+        # in its artifact, next to the diffs and prior state.
+        outcome_path = env.context_dir / "agent-outcome"
+        output_path = env.context_dir / "agent-output.json"
         post(
             env,
-            agent_ok=os.environ.get("AGENT_OUTCOME") == "success",
-            agent_output=os.environ.get("AGENT_OUTPUT", ""),
+            agent_ok=outcome_path.exists() and outcome_path.read_text(encoding="utf-8").strip() == "success",
+            agent_output=output_path.read_text(encoding="utf-8") if output_path.exists() else "",
             mode=mode,
             prior_sha=prior,
         )
