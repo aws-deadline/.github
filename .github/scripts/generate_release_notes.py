@@ -11,7 +11,7 @@ from datetime import date
 
 import boto3
 
-MODEL_ID = "us.anthropic.claude-opus-4-6-v1"
+MODEL_ID = "us.anthropic.claude-opus-5-5"
 
 TOOL_DEFINITION = {
     "name": "emit_release_notes",
@@ -183,7 +183,9 @@ def invoke_bedrock(input_text: str, region: str, repo_name: str) -> list[dict]:
             "max_tokens": 4096,
             "system": build_system_prompt(repo_name),
             "tools": [TOOL_DEFINITION],
-            "tool_choice": {"type": "tool", "name": "emit_release_notes"},
+            # Opus 5.5 rejects forced tool choice ("tool"/"any"); the system
+            # prompt requires the tool call and the loop below enforces it.
+            "tool_choice": {"type": "auto"},
             "messages": [{"role": "user", "content": input_text}],
         }),
     )
