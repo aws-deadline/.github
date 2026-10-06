@@ -128,6 +128,9 @@ class Thread:
     first_comment_id: int | None
     body: str
     replies: list[dict[str, str]] = field(default_factory=list)
+    # Marked addressed but still open in GitHub (marked while the token could
+    # not resolve threads); resolved as soon as it can be.
+    needs_resolve: bool = False
 
 
 def parse_threads(nodes: Iterable[dict[str, Any]]) -> list[Thread]:
@@ -141,6 +144,11 @@ def parse_threads(nodes: Iterable[dict[str, Any]]) -> list[Thread]:
         if parsed is None:
             continue
         fp, sev = parsed
+        github_resolved = bool(node.get("isResolved"))
+        addressed = any(
+            ((c.get("author") or {}).get("login") in BOT_LOGINS) and ADDRESSED_MARKER in (c.get("body") or "")
+            for c in comments[1:]
+        )
         threads.append(
             Thread(
                 id=node["id"],
@@ -148,11 +156,7 @@ def parse_threads(nodes: Iterable[dict[str, Any]]) -> list[Thread]:
                 severity=sev,
                 path=node.get("path") or "",
                 line=node.get("line"),
-                is_resolved=bool(node.get("isResolved"))
-                or any(
-                    ((c.get("author") or {}).get("login") in BOT_LOGINS) and ADDRESSED_MARKER in (c.get("body") or "")
-                    for c in comments[1:]
-                ),
+                is_resolved=github_resolved or addressed,
                 is_outdated=bool(node.get("isOutdated")),
                 first_comment_id=comments[0].get("databaseId"),
                 body=FP_MARKER_RE.sub("", comments[0].get("body", "")).strip(),
@@ -163,6 +167,7 @@ def parse_threads(nodes: Iterable[dict[str, Any]]) -> list[Thread]:
                     }
                     for c in comments[1:]
                 ],
+                needs_resolve=addressed and not github_resolved,
             )
         )
     return threads
@@ -590,30 +595,32 @@ def close_addressed(env: Env, threads: list[Thread], resolutions: list[Resolutio
     """Reply with the reason and resolve each thread the agent judged addressed.
 
     The marked reply is what counts; resolving is best effort and needs
-    `contents: write` from the caller. After the first refusal the remaining
-    threads are only marked, rather than repeating a call that will fail.
+    `contents: write` from the caller. Threads marked on an earlier run but
+    still open in GitHub are resolved too. After the first refusal the rest are
+    only marked, rather than repeating a call that will fail.
     """
     by_fp: dict[str, list[Thread]] = {}
     for t in threads:
         if not t.is_resolved and t.first_comment_id:
             by_fp.setdefault(t.fp, []).append(t)
+    to_resolve = [t for t in threads if t.needs_resolve]
     done = 0
-    can_resolve = True
     for r in resolutions:
         for t in by_fp.pop(r.fp, []):
             if gh(
                 f"repos/{env.repo}/pulls/{env.pr}/comments/{t.first_comment_id}/replies",
                 "-f", f"body=Addressed: {r.reason}\n\n{ADDRESSED_MARKER}",
                 check=False,
-            ) is None:
-                continue
-            done += 1
-            if can_resolve and gh("graphql", "-f", f"query={RESOLVE_MUTATION}", "-f", f"id={t.id}", check=False) is None:
-                can_resolve = False
-                print(
-                    "::notice::Could not resolve review threads; grant `contents: write` to let the review "
-                    "resolve threads it marks addressed."
-                )
+            ) is not None:
+                done += 1
+                to_resolve.append(t)
+    for t in to_resolve:
+        if gh("graphql", "-f", f"query={RESOLVE_MUTATION}", "-f", f"id={t.id}", check=False) is None:
+            print(
+                "::notice::Could not resolve review threads; grant `contents: write` to let the review "
+                "resolve threads it marks addressed."
+            )
+            break
     return done
 
 
@@ -639,7 +646,7 @@ def post(env: Env, *, agent_ok: bool, agent_output: str, mode: str, prior_sha: s
 
     posted = post_review(env, findings)
     threads = fetch_threads(env.repo, env.pr)
-    resolved = close_addressed(env, threads, resolutions) if resolutions else 0
+    resolved = close_addressed(env, threads, resolutions)
     if resolved:
         threads = fetch_threads(env.repo, env.pr)
     counts = open_counts(threads)

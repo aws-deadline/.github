@@ -127,7 +127,61 @@ class AddressedTest(TestCase):
             ]
         )
         self.assertEqual([t.is_resolved for t in threads], [True, False])
+        self.assertEqual([t.needs_resolve for t in threads], [True, False])
         self.assertEqual(review.open_counts(threads)["should-fix"], 1)
+
+
+class CloseAddressedTest(TestCase):
+    def setUp(self):
+        self.calls = []
+
+        def fake_gh(*args, input_json=None, check=True):
+            self.calls.append(args)
+            if args[0] == "graphql" and self.resolve_fails:
+                return None
+            return {}
+
+        self._orig = review.gh
+        review.gh = fake_gh
+        self.env = review.Env(
+            repo="o/r", pr=1, head_sha=SHA_A, base_sha=SHA_B, checkout="pr-head",
+            context_dir=Path("review-context"), run_url="u",
+        )
+        self.threads = review.parse_threads(
+            [
+                _thread("a.py::c::open"),
+                _thread("a.py::c::marked", bot_replies=[f"Addressed: x\n\n{review.ADDRESSED_MARKER}"]),
+                _thread("a.py::c::done", resolved=True),
+            ]
+        )
+
+    def tearDown(self):
+        review.gh = self._orig
+
+    def _kinds(self):
+        return ["reply" if a[0].endswith("/replies") else a[0] for a in self.calls]
+
+    def test_replies_then_resolves_including_backfill(self):
+        self.resolve_fails = False
+        done = review.close_addressed(self.env, self.threads, [review.Resolution(fp="a.py::c::open", reason="Fixed.")])
+        self.assertEqual(done, 1)
+        self.assertEqual(self._kinds(), ["reply", "graphql", "graphql"])
+        resolved_ids = [a[-1] for a in self.calls if a[0] == "graphql"]
+        self.assertEqual(sorted(resolved_ids), ["id=T_a.py::c::marked", "id=T_a.py::c::open"])
+
+    def test_stops_resolving_after_refusal(self):
+        self.resolve_fails = True
+        done = review.close_addressed(self.env, self.threads, [review.Resolution(fp="a.py::c::open", reason="Fixed.")])
+        self.assertEqual(done, 1)
+        self.assertEqual(self._kinds(), ["reply", "graphql"])
+
+    def test_ignores_unknown_and_already_resolved(self):
+        self.resolve_fails = False
+        done = review.close_addressed(
+            self.env, self.threads, [review.Resolution(fp="a.py::c::done", reason="x"), review.Resolution(fp="nope", reason="x")]
+        )
+        self.assertEqual(done, 0)
+        self.assertEqual(self._kinds(), ["graphql"])  # backfill of the marked thread only
 
 
 class FindSummaryTest(TestCase):
