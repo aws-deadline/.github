@@ -44,8 +44,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-SEVERITIES = ("blocking", "should-fix", "nit")
-SEVERITY_LABELS = {"blocking": "Blocking", "should-fix": "Should fix", "nit": "Nit"}
+SEVERITIES = ("blocking", "should-fix", "nit", "reminder")
+SEVERITY_LABELS = {"blocking": "Blocking", "should-fix": "Should fix", "nit": "Nit", "reminder": "Reminder"}
+INSTALLER_REMINDER_SYMBOL = "shared-installer-coordination"
+INSTALLER_REMINDER_FP_SUFFIX = f"::design::{INSTALLER_REMINDER_SYMBOL}"
+# These are fixed public messages: model output and replies must not introduce
+# non-public implementation details or tracking links into coordination comments.
+INSTALLER_REMINDER_BODY = (
+    "This PR changes installer components or their configuration options. Could the author or a maintainer "
+    "confirm whether the shared Deadline Cloud submitter installer needs a corresponding update and, if so, "
+    "that the follow-up will be coordinated? A brief confirmation or an explanation that no update is needed "
+    "is sufficient; please keep non-public implementation details and tracking links out of this public thread."
+)
+INSTALLER_REMINDER_RESOLUTION = (
+    "The author or a maintainer confirmed that any necessary shared-installer follow-up will be coordinated, "
+    "or explained that no corresponding update is needed."
+)
 # Comments posted before severities existed carry no sev; count them as
 # should-fix so they keep the status red until someone resolves them.
 DEFAULT_SEVERITY = "should-fix"
@@ -115,6 +129,10 @@ def parse_fp_marker(body: str) -> tuple[str, str] | None:
     return m.group("fp"), sev if sev in SEVERITIES else DEFAULT_SEVERITY
 
 
+def is_installer_reminder_fp(fp: str) -> bool:
+    return fp.endswith(INSTALLER_REMINDER_FP_SUFFIX)
+
+
 @dataclass
 class Thread:
     id: str
@@ -177,9 +195,10 @@ def suppressed_fps(threads: Iterable[Thread]) -> set[str]:
     """Findings that must not be posted again.
 
     Everything except outdated-and-unresolved threads: those lost their line,
-    so the same finding may be re-anchored on the new code.
+    so the same finding may be re-anchored on the new code. The installer
+    coordination reminder is asked once per PR, even if its anchor is outdated.
     """
-    return {t.fp for t in threads if t.is_resolved or not t.is_outdated}
+    return {t.fp for t in threads if t.is_resolved or not t.is_outdated or is_installer_reminder_fp(t.fp)}
 
 
 def open_counts(threads: Iterable[Thread]) -> dict[str, int]:
@@ -280,6 +299,9 @@ def select_findings(
     - Incremental reviews post no nits, and post should-fix findings only on
       lines this revision changed; blocking findings may land anywhere in the
       PR diff, since a missed blocker is worth raising late.
+    - The installer coordination reminder uses fixed public wording, never
+      blocks the status, and may be raised on newly changed lines in either
+      review mode. It is deduplicated across paths.
     """
     findings: list[Finding] = []
     resolutions: list[Resolution] = []
@@ -291,6 +313,8 @@ def select_findings(
             fp = str(r.get("fp", "")).strip()
             reason = str(r.get("reason", "")).strip()
             if fp and reason:
+                if is_installer_reminder_fp(fp):
+                    reason = INSTALLER_REMINDER_RESOLUTION
                 resolutions.append(Resolution(fp=fp, reason=reason[:MAX_REASON_CHARS]))
             else:
                 dropped.append(f"resolve entry missing fp/reason: {r!r:.120}")
@@ -303,14 +327,21 @@ def select_findings(
         except (TypeError, ValueError):
             line = -1
         fp = make_fp(path, str(r.get("category", "")), str(r.get("symbol", "")))
+        installer_reminder = is_installer_reminder_fp(fp)
+        if installer_reminder:
+            severity, body = "reminder", INSTALLER_REMINDER_BODY
         label = f"{fp} ({path}:{line})"
         snapped = snap_line(line, pr_lines.get(path, set()))
         if severity not in SEVERITIES or not body:
             dropped.append(f"{label}: missing/invalid severity or body")
+        elif severity == "reminder" and not installer_reminder:
+            dropped.append(f"{label}: reminder is reserved for installer coordination")
         elif snapped is None:
             dropped.append(f"{label}: line is not part of the PR diff")
         elif fp in suppress:
             dropped.append(f"{label}: already raised")
+        elif installer_reminder and any(is_installer_reminder_fp(prior) for prior in suppress | seen):
+            dropped.append(f"{label}: installer coordination already raised on this PR")
         elif mode == "incremental" and severity == "nit":
             dropped.append(f"{label}: nit on an incremental review")
         elif (
@@ -333,19 +364,26 @@ def select_findings(
 
 
 def render_comment(f: Finding) -> str:
-    body = f.body[:MAX_BODY_CHARS]
+    body = INSTALLER_REMINDER_BODY if is_installer_reminder_fp(f.fp) else f.body[:MAX_BODY_CHARS]
     return f"**{SEVERITY_LABELS[f.severity]}:** {body}\n\n<!-- claude-review fp={f.fp} sev={f.severity} -->"
 
 
 def status_for(counts: dict[str, int], agent_ok: bool) -> tuple[str, str]:
-    """Commit status state + description. Nits never hold the status red."""
+    """Commit status state + description. Nits and reminders never hold it red."""
     if not agent_ok:
         return "error", "Review did not finish; push again or re-run to retry"
     must = counts["blocking"] + counts["should-fix"]
+    reminders = counts.get("reminder", 0)
     if must == 0:
-        nits = f" ({counts['nit']} nit{'s' if counts['nit'] != 1 else ''} open)" if counts["nit"] else ""
-        return "success", f"No blocking or should-fix findings open{nits}"
-    return "failure", f"Open: {counts['blocking']} blocking, {counts['should-fix']} should-fix, {counts['nit']} nit"
+        optional = []
+        if counts["nit"]:
+            optional.append(f"{counts['nit']} nit{'s' if counts['nit'] != 1 else ''}")
+        if reminders:
+            optional.append(f"{reminders} reminder{'s' if reminders != 1 else ''}")
+        suffix = f" ({', '.join(optional)} open)" if optional else ""
+        return "success", f"No blocking or should-fix findings open{suffix}"
+    suffix = f", {reminders} reminder" if reminders else ""
+    return "failure", f"Open: {counts['blocking']} blocking, {counts['should-fix']} should-fix, {counts['nit']} nit{suffix}"
 
 
 def render_summary(
@@ -374,10 +412,11 @@ def render_summary(
         state = "✅ Nothing blocking."
     else:
         state = ""
+    reminders = f" · {counts['reminder']} reminder" if counts.get("reminder") else ""
     return (
         "**Claude review** · advisory\n\n"
         f"{headline}\n\n"
-        f"Open: **{counts['blocking']} blocking** · {counts['should-fix']} should-fix · {counts['nit']} nit. {state}".rstrip()
+        f"Open: **{counts['blocking']} blocking** · {counts['should-fix']} should-fix · {counts['nit']} nit{reminders}. {state}".rstrip()
         + "\n\n"
         "<sub>Fix or reply to each thread; the next revision's review re-checks open threads and resolves "
         "those it agrees are handled. Resolving a thread yourself also closes it. Later revisions review only "

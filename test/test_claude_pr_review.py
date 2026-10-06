@@ -114,7 +114,7 @@ class ThreadStateTest(TestCase):
         )
 
     def test_open_counts(self):
-        self.assertEqual(review.open_counts(self.threads), {"blocking": 0, "should-fix": 3, "nit": 1})
+        self.assertEqual(review.open_counts(self.threads), {"blocking": 0, "should-fix": 3, "nit": 1, "reminder": 0})
 
 
 class AddressedTest(TestCase):
@@ -284,6 +284,73 @@ class ParseAgentOutputTest(TestCase):
             self.assertIsNone(review.parse_agent_output(text), text)
 
 
+class InstallerReminderTest(TestCase):
+    PATH = "install_builder/deadline-cloud-for-houdini.xml"
+    OTHER_PATH = "installer/DeadlineCloudForHoudiniSubmitter.xml"
+
+    def _finding(self, **kw):
+        return _finding(
+            path=kw.pop("path", self.PATH), line=kw.pop("line", 12),
+            severity=kw.pop("severity", "reminder"), category="design",
+            symbol=review.INSTALLER_REMINDER_SYMBOL,
+            body="Please update a private repository: https://example.invalid/private-tracker",
+            **kw,
+        )
+
+    def _select(self, records, *, mode="full", suppress=()):
+        return review.select_findings(
+            records, mode=mode,
+            pr_lines={self.PATH: {11, 12}, self.OTHER_PATH: {12}},
+            interdiff_lines={self.PATH: {12}, self.OTHER_PATH: {12}},
+            suppress=set(suppress),
+        )
+
+    def test_reminder_is_public_and_non_blocking_in_both_modes(self):
+        for mode in ("full", "incremental"):
+            with self.subTest(mode=mode):
+                findings, _, dropped = self._select([self._finding(severity="blocking")], mode=mode)
+                self.assertEqual(dropped, [])
+                self.assertEqual(findings[0].severity, "reminder")
+                self.assertEqual(findings[0].body, review.INSTALLER_REMINDER_BODY)
+                rendered = review.render_comment(findings[0])
+                self.assertTrue(rendered.startswith("**Reminder:**"))
+                self.assertNotIn("example.invalid", rendered)
+                self.assertEqual(review.parse_fp_marker(rendered), (findings[0].fp, "reminder"))
+                counts = review.open_counts(review.parse_threads([_thread(findings[0].fp, sev="reminder")]))
+                self.assertEqual(counts["reminder"], 1)
+                self.assertEqual(review.status_for(counts, True)[0], "success")
+
+    def test_incremental_reminder_requires_a_newly_changed_line(self):
+        findings, _, dropped = self._select([self._finding(line=11)], mode="incremental")
+        self.assertEqual(findings, [])
+        self.assertEqual(len(dropped), 1)
+
+    def test_only_one_reminder_even_when_multiple_files_change(self):
+        findings, _, dropped = self._select([self._finding(), self._finding(path=self.OTHER_PATH)])
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(len(dropped), 1)
+
+    def test_reminder_is_suppressed_across_paths_and_outdated_threads(self):
+        fp = review.make_fp(self.OTHER_PATH, "design", review.INSTALLER_REMINDER_SYMBOL)
+        threads = review.parse_threads([_thread(fp, sev="reminder", outdated=True)])
+        findings, _, dropped = self._select([self._finding()], suppress=review.suppressed_fps(threads))
+        self.assertEqual(findings, [])
+        self.assertEqual(len(dropped), 1)
+
+    def test_resolution_does_not_echo_reply_details(self):
+        fp = review.make_fp(self.PATH, "design", review.INSTALLER_REMINDER_SYMBOL)
+        _, resolutions, dropped = self._select(
+            [{"kind": "resolve", "fp": fp, "reason": "Tracked at https://example.invalid/private-tracker"}]
+        )
+        self.assertEqual(dropped, [])
+        self.assertEqual(resolutions[0].reason, review.INSTALLER_REMINDER_RESOLUTION)
+
+    def test_reminder_severity_is_reserved_for_the_coordination_check(self):
+        findings, _, dropped = self._select([_finding(severity="reminder", path=self.PATH, line=12)])
+        self.assertEqual(findings, [])
+        self.assertEqual(len(dropped), 1)
+
+
 class StatusAndSummaryTest(TestCase):
     def test_status(self):
         self.assertEqual(review.status_for({"blocking": 0, "should-fix": 0, "nit": 2}, True)[0], "success")
@@ -299,6 +366,14 @@ class StatusAndSummaryTest(TestCase):
         )
         self.assertEqual(review.find_summary([{"id": 9, "user": {"login": "github-actions[bot]"}, "body": body}]), (9, SHA_A))
         self.assertIn("changes since `bbbbbbb`", body)
+
+    def test_summary_reports_reminder_without_blocking(self):
+        body = review.render_summary(
+            reviewed_sha=SHA_A, head_sha=SHA_A, mode="full", since_sha=None, agent_ok=True,
+            counts={"blocking": 0, "should-fix": 0, "nit": 0, "reminder": 1}, posted=1, resolved=0, run_url="u",
+        )
+        self.assertIn("1 reminder", body)
+        self.assertIn("✅ Nothing blocking.", body)
 
     def test_summary_without_baseline(self):
         body = review.render_summary(

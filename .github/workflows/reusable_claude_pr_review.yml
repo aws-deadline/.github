@@ -25,7 +25,8 @@
 #     against the last recorded commit: open threads are re-checked (and
 #     resolved when addressed), and only newly changed code is reviewed.
 #   - Findings carry a severity (blocking / should-fix / nit). Nits are posted
-#     only on the full review.
+#     only on the full review. Installer coordination reminders are non-blocking
+#     and may be posted in either review mode.
 #   - A sticky summary comment and a "Claude review" commit status report
 #     what is still open, so authors know when the review has settled. The
 #     status is set when a review finishes, so a head commit with no status
@@ -419,11 +420,41 @@ jobs:
             - `should-fix`: a real defect or risk that is likelier than not to
               bite someone, but is not an outright break.
             - `nit`: minor clarity, naming, docs, or tests worth mentioning once.
+            - `reminder`: a non-blocking installer coordination question, reserved
+              for the check below. Never use it for a code defect.
             Do not raise: problems in code this PR does not touch (pre-existing
             issues), style a linter or formatter would catch, speculative
             scenarios that need an unlikely chain of events, or restatements of
             an earlier finding. If unsure whether something is real, check the
             code before writing it up; if still unsure, leave it out.
+
+            ── INSTALLER COMPONENT COORDINATION ──
+            If this PR adds, removes, or renames selectable application/version
+            components in a Deadline Cloud submitter installer definition, or
+            changes the CLI options used to select/configure those components,
+            return one `reminder` asking the author or a maintainer to confirm
+            whether the shared Deadline Cloud submitter installer needs a
+            corresponding update and that any necessary follow-up will be
+            coordinated. Inspect installer/ and install_builder/ definitions
+            and related configuration. Skip unrelated payload/build changes,
+            image assets, and formatting-only edits.
+
+            Use category `design`, symbol `shared-installer-coordination`, and
+            a relevant changed line. This check applies in both full and
+            incremental mode; in incremental mode, raise it only for new
+            component/CLI changes in interdiff.diff. The posting script supplies
+            the fixed public confirmation question.
+
+            Ask once per PR. If open_threads or suppress already contains this
+            symbol, use the existing thread instead of raising it again.
+            Accept a brief author/maintainer confirmation that follow-up will be
+            coordinated, or an explanation that no corresponding update is
+            needed, as a resolution. You cannot verify downstream work from this
+            repository, so do not claim that an update is missing or demand proof.
+            Keep the question and resolution public-safe: never name non-public
+            repositories, packages, systems, accounts, or teams; never quote
+            non-public implementation details, identifiers, or tracking links
+            from a reply; and never ask the contributor to provide those details.
 
             ── HOW TO REPORT ──
             You do not post anything yourself. Return your findings as the
@@ -435,7 +466,7 @@ jobs:
                         a changed or context line of pr.diff (in incremental
                         mode, of interdiff.diff). A high-level point that maps
                         to no single line goes on the most relevant changed line.
-              severity  blocking | should-fix | nit
+              severity  blocking | should-fix | nit | reminder
               category  correctness | security | tests | docs | design
               symbol    the identifier the finding is about, plus a short slug
                         for the issue when one identifier has several
@@ -456,11 +487,14 @@ jobs:
             Then the fix, in a sentence or a short code block. No preamble, no
             praise, no restating the code. Do not include a severity label or
             any HTML comment; both are added when posting.
+            For the installer reminder, ask for confirmation rather than stating
+            a defect; its final body and resolution use fixed public wording.
 
-            If there is nothing material to report, return empty lists.
+            If there are no material findings or applicable installer reminders,
+            return empty lists.
           claude_args: |
             --model ${{ inputs.model_id }}
-            --json-schema '{"type":"object","additionalProperties":false,"required":["findings","resolutions"],"properties":{"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["path","line","severity","category","symbol","body"],"properties":{"path":{"type":"string"},"line":{"type":"integer"},"severity":{"type":"string","enum":["blocking","should-fix","nit"]},"category":{"type":"string"},"symbol":{"type":"string"},"body":{"type":"string"}}}},"resolutions":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["fp","reason"],"properties":{"fp":{"type":"string"},"reason":{"type":"string"}}}}}}'
+            --json-schema '{"type":"object","additionalProperties":false,"required":["findings","resolutions"],"properties":{"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["path","line","severity","category","symbol","body"],"properties":{"path":{"type":"string"},"line":{"type":"integer"},"severity":{"type":"string","enum":["blocking","should-fix","nit","reminder"]},"category":{"type":"string"},"symbol":{"type":"string"},"body":{"type":"string"}}}},"resolutions":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["fp","reason"],"properties":{"fp":{"type":"string"},"reason":{"type":"string"}}}}}}'
             --allowedTools "Read,Glob,Grep,Bash(cat:*),Bash(head:*),Bash(wc:*),Bash(jq:*),Bash(git -C pr-head diff:*),Bash(git -C pr-head log:*),Bash(git -C pr-head show:*),Bash(git -C pr-head blame:*)"
 
       # Hand the agent's outcome and structured output to the post job,
