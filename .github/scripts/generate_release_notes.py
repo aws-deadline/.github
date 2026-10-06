@@ -171,32 +171,59 @@ def build_system_prompt(repo_name: str) -> str:
     return SYSTEM_PROMPT.format(repo_name=repo_name, readme_section=readme_section)
 
 
+MAX_ATTEMPTS = 3
+TOOL_REMINDER = (
+    "Call the emit_release_notes tool now with all entries, or with an empty entries list "
+    "if no change is customer-facing. Do not answer in text."
+)
+
+
 def invoke_bedrock(input_text: str, region: str, repo_name: str) -> list[dict]:
     client = boto3.client("bedrock-runtime", region_name=region)
+    system = build_system_prompt(repo_name)
+    messages = [{"role": "user", "content": input_text}]
 
-    response = client.invoke_model(
-        modelId=MODEL_ID,
-        contentType="application/json",
-        accept="application/json",
-        body=json.dumps({
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 4096,
-            "system": build_system_prompt(repo_name),
-            "tools": [TOOL_DEFINITION],
-            # Opus 5.5 rejects forced tool choice ("tool"/"any"); the system
-            # prompt requires the tool call and the loop below enforces it.
-            "tool_choice": {"type": "auto"},
-            "messages": [{"role": "user", "content": input_text}],
-        }),
-    )
+    # Opus 5.5 rejects forced tool choice ("tool"/"any"), so the model may
+    # answer in text despite the system prompt. Ask again a bounded number of
+    # times, keeping its earlier reply in the conversation.
+    for _ in range(MAX_ATTEMPTS):
+        response = client.invoke_model(
+            modelId=MODEL_ID,
+            contentType="application/json",
+            accept="application/json",
+            body=json.dumps({
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 4096,
+                "system": system,
+                "tools": [TOOL_DEFINITION],
+                "tool_choice": {"type": "auto"},
+                "messages": messages,
+            }),
+        )
+        body = json.loads(response["body"].read())
+        content = body.get("content") or []
 
-    body = json.loads(response["body"].read())
+        tool_uses = [b for b in content if b.get("type") == "tool_use"]
+        for block in tool_uses:
+            entries = (block.get("input") or {}).get("entries")
+            if block.get("name") == "emit_release_notes" and isinstance(entries, list):
+                return entries
+        if body.get("stop_reason") == "refusal" or not content:
+            break
+        # A tool_use left in the history must be answered with its result.
+        messages += [
+            {"role": "assistant", "content": content},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": b["id"], "is_error": True, "content": "Invalid call."}
+                    for b in tool_uses
+                ]
+                + [{"type": "text", "text": TOOL_REMINDER}],
+            },
+        ]
 
-    for block in body.get("content", []):
-        if block.get("type") == "tool_use" and block.get("name") == "emit_release_notes":
-            return block["input"]["entries"]
-
-    raise RuntimeError(f"No tool_use block in response: {json.dumps(body, indent=2)}")
+    raise RuntimeError(f"No emit_release_notes call in response: {json.dumps(body, indent=2)}")
 
 
 def render_changelog(version: str, entries: list[dict]) -> str:

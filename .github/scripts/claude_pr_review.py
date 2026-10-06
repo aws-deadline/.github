@@ -64,7 +64,11 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 # would corrupt the marker.
 FP_PART_RE = re.compile(r"[^A-Za-z0-9_./+\-]")
 ADDRESSED_MARKER = "<!-- claude-review addressed -->"
-HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(?P<start>\d+)(?:,\d+)? @@")
+HUNK_RE = re.compile(r"^@@ -(?P<old>\d+)(?:,\d+)? \+(?P<new>\d+)(?:,\d+)? @@")
+SIDES = ("RIGHT", "LEFT")
+
+# Per side, each file's commentable line numbers.
+DiffLines = dict[str, dict[str, set[int]]]
 
 
 # ---------------------------------------------------------------------------
@@ -72,33 +76,50 @@ HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(?P<start>\d+)(?:,\d+)? @@")
 # ---------------------------------------------------------------------------
 
 
-def diff_right_lines(diff_text: str) -> dict[str, set[int]]:
-    """Map each file to the new-side line numbers a review comment can anchor to.
+def diff_lines(diff_text: str) -> DiffLines:
+    """Map each file to the line numbers a review comment can anchor to, per side.
 
-    These are the added and context lines of every hunk: exactly the lines
-    GitHub accepts for a RIGHT-side review comment on this diff.
+    RIGHT holds the new-side numbers of added and context lines; LEFT holds the
+    old-side numbers of removed and context lines: exactly the lines GitHub
+    accepts for a review comment on that side of this diff. Files are keyed by
+    their new path, or by their old path when deleted (as GitHub does), so a
+    finding about removed code -- including a whole deleted file -- has a
+    LEFT anchor.
     """
-    lines: dict[str, set[int]] = {}
+    lines: DiffLines = {side: {} for side in SIDES}
+    old_path: str | None = None
     path: str | None = None
-    new_line = 0
+    old_line = new_line = 0
     for raw in diff_text.splitlines():
         if raw.startswith("diff --git "):
-            path = None
-        elif raw.startswith("+++ "):
+            old_path = path = None
+            old_line = new_line = 0
+        elif raw.startswith("--- ") and path is None:
+            source = raw[4:]
+            old_path = source[2:] if source.startswith("a/") else None
+        elif raw.startswith("+++ ") and path is None:
             target = raw[4:]
-            path = target[2:] if target.startswith("b/") else None
+            path = target[2:] if target.startswith("b/") else old_path
             if path is not None:
-                lines.setdefault(path, set())
+                for side in SIDES:
+                    lines[side].setdefault(path, set())
         elif raw.startswith("@@"):
             m = HUNK_RE.match(raw)
-            new_line = int(m.group("start")) if m else 0
-        elif path is not None and new_line:
-            if raw.startswith("+") or raw.startswith(" "):
-                lines[path].add(new_line)
+            old_line, new_line = (int(m.group("old")), int(m.group("new"))) if m else (0, 0)
+        elif path is not None and (old_line or new_line):
+            if raw.startswith("+"):
+                lines["RIGHT"][path].add(new_line)
                 new_line += 1
-            elif raw.startswith("\\"):
-                continue
-            # "-" lines exist only on the old side.
+            elif raw.startswith("-"):
+                lines["LEFT"][path].add(old_line)
+                old_line += 1
+            elif raw.startswith(" "):
+                lines["RIGHT"][path].add(new_line)
+                lines["LEFT"][path].add(old_line)
+                new_line += 1
+                old_line += 1
+    for side in SIDES:
+        lines[side] = {p: s for p, s in lines[side].items() if s}
     return lines
 
 
@@ -139,6 +160,11 @@ def parse_threads(nodes: Iterable[dict[str, Any]]) -> list[Thread]:
     for node in nodes:
         comments = (node.get("comments") or {}).get("nodes") or []
         if not comments:
+            continue
+        # Anyone can open a review thread, and the fp format is predictable:
+        # a forged marker would suppress the real finding, skew the open
+        # counts, or get a human's thread replied to and resolved.
+        if ((comments[0].get("author") or {}).get("login")) not in BOT_LOGINS:
             continue
         parsed = parse_fp_marker(comments[0].get("body", ""))
         if parsed is None:
@@ -215,6 +241,7 @@ class Finding:
     severity: str
     fp: str
     body: str
+    side: str = "RIGHT"
 
 
 @dataclass
@@ -266,20 +293,24 @@ def select_findings(
     records: Iterable[dict[str, Any]],
     *,
     mode: str,
-    pr_lines: dict[str, set[int]],
-    interdiff_lines: dict[str, set[int]],
+    pr_lines: DiffLines,
+    interdiff_lines: DiffLines,
     suppress: set[str],
 ) -> tuple[list[Finding], list[Resolution], list[str]]:
     """Validate the agent's output and apply the posting rules.
 
-    - A finding must anchor to a line GitHub will accept on the PR diff
-      (snapped to the nearest one when it is slightly off).
+    - A finding must anchor to a line GitHub will accept on its side of the
+      PR diff (snapped to the nearest one when it is slightly off). LEFT
+      anchors removed code by its old line number.
     - Its fp must not already be suppressed. Two findings in one run that
       share an fp are distinct issues on the same symbol (the agent does not
       repeat itself within a run), so later ones get a numeric suffix.
     - Incremental reviews post no nits, and post should-fix findings only on
       lines this revision changed; blocking findings may land anywhere in the
-      PR diff, since a missed blocker is worth raising late.
+      PR diff, since a missed blocker is worth raising late. Old-side line
+      numbers of the PR diff and the interdiff count from different commits,
+      so a LEFT should-fix only needs this revision to have removed code from
+      the same file.
     """
     findings: list[Finding] = []
     resolutions: list[Resolution] = []
@@ -297,6 +328,7 @@ def select_findings(
             continue
         path = str(r.get("path", "")).strip()
         severity = str(r.get("severity", "")).strip()
+        side = str(r.get("side") or "RIGHT").strip().upper()
         body = str(r.get("body", "")).strip()
         try:
             line = int(r.get("line"))
@@ -304,7 +336,11 @@ def select_findings(
             line = -1
         fp = make_fp(path, str(r.get("category", "")), str(r.get("symbol", "")))
         label = f"{fp} ({path}:{line})"
-        snapped = snap_line(line, pr_lines.get(path, set()))
+        if side not in SIDES:
+            dropped.append(f"{label}: invalid side {side!r:.20}")
+            continue
+        snapped = snap_line(line, pr_lines[side].get(path, set()))
+        changed = interdiff_lines[side].get(path, set())
         if severity not in SEVERITIES or not body:
             dropped.append(f"{label}: missing/invalid severity or body")
         elif snapped is None:
@@ -316,7 +352,7 @@ def select_findings(
         elif (
             mode == "incremental"
             and severity != "blocking"
-            and not {line, snapped} & interdiff_lines.get(path, set())
+            and not (changed if side == "LEFT" else {line, snapped} & changed)
         ):
             dropped.append(f"{label}: {severity} on code this revision did not change")
         else:
@@ -328,19 +364,31 @@ def select_findings(
             while fp in seen or fp in suppress:
                 fp, n = f"{base}-{n}", n + 1
             seen.add(fp)
-            findings.append(Finding(path=path, line=line, severity=severity, fp=fp, body=body))
+            findings.append(Finding(path=path, line=line, severity=severity, fp=fp, body=body, side=side))
     return findings, resolutions, dropped
 
 
+def defang(text: str) -> str:
+    """Neutralize HTML comments in model text before posting it.
+
+    Markers are matched by search, so a marker the PR induced the model to
+    write would take precedence over the one we append (relabelling the
+    finding's fp or severity), or forge an addressed or summary marker.
+    """
+    return text.replace("<!--", "&lt;!--")
+
+
 def render_comment(f: Finding) -> str:
-    body = f.body[:MAX_BODY_CHARS]
+    body = defang(f.body[:MAX_BODY_CHARS])
     return f"**{SEVERITY_LABELS[f.severity]}:** {body}\n\n<!-- claude-review fp={f.fp} sev={f.severity} -->"
 
 
-def status_for(counts: dict[str, int], agent_ok: bool) -> tuple[str, str]:
+def status_for(counts: dict[str, int], agent_ok: bool, unposted: int = 0) -> tuple[str, str]:
     """Commit status state + description. Nits never hold the status red."""
     if not agent_ok:
         return "error", "Review did not finish; push again or re-run to retry"
+    if unposted:
+        return "error", f"{unposted} finding{'s' if unposted != 1 else ''} could not be posted; re-run to retry"
     must = counts["blocking"] + counts["should-fix"]
     if must == 0:
         nits = f" ({counts['nit']} nit{'s' if counts['nit'] != 1 else ''} open)" if counts["nit"] else ""
@@ -359,10 +407,17 @@ def render_summary(
     posted: int,
     resolved: int,
     run_url: str,
+    unposted: Iterable[Finding] = (),
 ) -> str:
     short = head_sha[:7]
+    unposted = list(unposted)
     if not agent_ok:
         headline = f"Review of `{short}` did not finish ([run]({run_url})). The next push retries it."
+    elif unposted:
+        headline = (
+            f"Reviewed `{short}`, but {len(unposted)} of {posted + len(unposted)} new findings could not be "
+            f"posted ([run]({run_url})); they are listed below. Re-run the workflow or push again to retry."
+        )
     elif mode == "incremental" and since_sha:
         headline = f"Reviewed `{short}` (changes since `{since_sha[:7]}`): {posted} new, {resolved} resolved."
     else:
@@ -370,16 +425,22 @@ def render_summary(
     must = counts["blocking"] + counts["should-fix"]
     if must:
         state = "❌ Address or reply to the open threads."
-    elif agent_ok:
+    elif agent_ok and not unposted:
         state = "✅ Nothing blocking."
     else:
         state = ""
+    unposted_list = "".join(
+        f"- **{SEVERITY_LABELS[f.severity]}** `{f.path}:{f.line}`{' (removed code)' if f.side == 'LEFT' else ''}: "
+        f"{defang(' '.join(f.body.split()))[:500]}\n"
+        for f in unposted
+    )
     return (
         "**Claude review** · advisory\n\n"
         f"{headline}\n\n"
         f"Open: **{counts['blocking']} blocking** · {counts['should-fix']} should-fix · {counts['nit']} nit. {state}".rstrip()
         + "\n\n"
-        "<sub>Fix or reply to each thread; the next revision's review re-checks open threads and resolves "
+        + (f"{unposted_list}\n" if unposted_list else "")
+        + "<sub>Fix or reply to each thread; the next revision's review re-checks open threads and resolves "
         "those it agrees are handled. Resolving a thread yourself also closes it. Later revisions review only "
         "what changed.</sub>\n\n"
         f"<!-- claude-review-summary reviewed={reviewed_sha or 'none'} -->"
@@ -529,7 +590,7 @@ def prepare(env: Env) -> None:
     diff_base = pr_diff_base(env)
     pr_diff = git(env.checkout, "diff", f"{diff_base}..{env.head_sha}")
     (env.context_dir / "pr.diff").write_text(pr_diff, encoding="utf-8")
-    pr_files = sorted(diff_right_lines(pr_diff))
+    pr_files = sorted({p for side in diff_lines(pr_diff).values() for p in side})
 
     mode = "full"
     if prior == env.head_sha:
@@ -569,23 +630,24 @@ def prepare(env: Env) -> None:
     write_output(mode=mode, prior_sha=prior or "", diff_base=diff_base)
 
 
-def post_review(env: Env, findings: list[Finding]) -> int:
+def post_review(env: Env, findings: list[Finding]) -> list[Finding]:
+    """Post the findings as one review; return the ones that could not be posted."""
     if not findings:
-        return 0
-    comments = [{"path": f.path, "line": f.line, "side": "RIGHT", "body": render_comment(f)} for f in findings]
+        return []
+    comments = [{"path": f.path, "line": f.line, "side": f.side, "body": render_comment(f)} for f in findings]
     if gh(
         f"repos/{env.repo}/pulls/{env.pr}/reviews",
         input_json={"commit_id": env.head_sha, "event": "COMMENT", "comments": comments},
         check=False,
     ) is not None:
-        return len(comments)
+        return []
     # One bad anchor rejects the whole batch; fall back to posting singly so the
     # rest still land.
-    posted = 0
-    for c in comments:
-        if gh(f"repos/{env.repo}/pulls/{env.pr}/comments", input_json={"commit_id": env.head_sha, **c}, check=False) is not None:
-            posted += 1
-    return posted
+    return [
+        f
+        for f, c in zip(findings, comments)
+        if gh(f"repos/{env.repo}/pulls/{env.pr}/comments", input_json={"commit_id": env.head_sha, **c}, check=False) is None
+    ]
 
 
 RESOLVE_MUTATION = "mutation($id:ID!){ resolveReviewThread(input:{threadId:$id}){ thread{ isResolved } } }"
@@ -609,7 +671,7 @@ def close_addressed(env: Env, threads: list[Thread], resolutions: list[Resolutio
         for t in by_fp.pop(r.fp, []):
             if gh(
                 f"repos/{env.repo}/pulls/{env.pr}/comments/{t.first_comment_id}/replies",
-                "-f", f"body=Addressed: {r.reason}\n\n{ADDRESSED_MARKER}",
+                "-f", f"body=Addressed: {defang(r.reason)}\n\n{ADDRESSED_MARKER}",
                 check=False,
             ) is not None:
                 done += 1
@@ -627,9 +689,12 @@ def close_addressed(env: Env, threads: list[Thread], resolutions: list[Resolutio
 def post(env: Env, *, agent_ok: bool, agent_output: str, mode: str, prior_sha: str | None) -> None:
     state_path = env.context_dir / "prior-review-state.json"
     suppress = set(json.loads(state_path.read_text(encoding="utf-8"))["suppress"]) if state_path.exists() else set()
-    pr_lines = diff_right_lines((env.context_dir / "pr.diff").read_text(encoding="utf-8"))
+    # Also suppress what is on the PR now: a re-run of this job after a
+    # partial post must not post the findings that did land a second time.
+    suppress |= suppressed_fps(fetch_threads(env.repo, env.pr))
+    pr_lines = diff_lines((env.context_dir / "pr.diff").read_text(encoding="utf-8"))
     interdiff_path = env.context_dir / "interdiff.diff"
-    interdiff_lines = diff_right_lines(interdiff_path.read_text(encoding="utf-8")) if interdiff_path.exists() else {}
+    interdiff_lines = diff_lines(interdiff_path.read_text(encoding="utf-8") if interdiff_path.exists() else "")
 
     parsed = parse_agent_output(agent_output) if agent_ok else None
     if parsed is None:
@@ -644,7 +709,8 @@ def post(env: Env, *, agent_ok: bool, agent_output: str, mode: str, prior_sha: s
     for msg in errors + dropped:
         print(f"skipped: {msg}")
 
-    posted = post_review(env, findings)
+    unposted = post_review(env, findings)
+    posted = len(findings) - len(unposted)
     threads = fetch_threads(env.repo, env.pr)
     resolved = close_addressed(env, threads, resolutions)
     if resolved:
@@ -652,9 +718,10 @@ def post(env: Env, *, agent_ok: bool, agent_output: str, mode: str, prior_sha: s
     counts = open_counts(threads)
 
     summary = fetch_summary(env.repo, env.pr)
-    # Advance the incremental baseline only when the review completed; a
-    # timed-out pass must not mark unread code as reviewed.
-    reviewed = env.head_sha if agent_ok else (summary[1] if summary else None)
+    # Advance the incremental baseline only when the review completed and all
+    # of it landed: a timed-out pass must not mark unread code as reviewed, nor
+    # a partial post drop the unposted findings from every later review.
+    reviewed = env.head_sha if agent_ok and not unposted else (summary[1] if summary else None)
     body = render_summary(
         reviewed_sha=reviewed,
         head_sha=env.head_sha,
@@ -665,15 +732,16 @@ def post(env: Env, *, agent_ok: bool, agent_output: str, mode: str, prior_sha: s
         posted=posted,
         resolved=resolved,
         run_url=env.run_url,
+        unposted=unposted,
     )
     if summary:
         gh(f"repos/{env.repo}/issues/comments/{summary[0]}", "-X", "PATCH", "-f", f"body={body}")
     else:
         gh(f"repos/{env.repo}/issues/{env.pr}/comments", "-f", f"body={body}")
 
-    state, description = status_for(counts, agent_ok)
+    state, description = status_for(counts, agent_ok, len(unposted))
     set_status(env.repo, env.head_sha, state, description, env.run_url)
-    print(f"posted={posted} resolved={resolved} open={counts} status={state}")
+    print(f"posted={posted} unposted={len(unposted)} resolved={resolved} open={counts} status={state}")
 
 
 def main(argv: list[str]) -> None:
