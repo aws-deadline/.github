@@ -114,7 +114,7 @@ class ThreadStateTest(TestCase):
         )
 
     def test_open_counts(self):
-        self.assertEqual(review.open_counts(self.threads), {"blocking": 0, "should-fix": 3, "nit": 1, "reminder": 0})
+        self.assertEqual(review.open_counts(self.threads), {"blocking": 0, "should-fix": 3, "nit": 1})
 
 
 class AddressedTest(TestCase):
@@ -182,6 +182,28 @@ class CloseAddressedTest(TestCase):
         )
         self.assertEqual(done, 0)
         self.assertEqual(self._kinds(), ["graphql"])  # backfill of the marked thread only
+
+    def test_confirmed_coordination_is_marked_addressed_even_if_resolving_is_unavailable(self):
+        self.resolve_fails = True
+        path = "install_builder/deadline-cloud-for-houdini.xml"
+        fp = review.make_fp(path, "design", review.INSTALLER_COORDINATION_SYMBOL)
+        threads = review.parse_threads([_thread(fp, replies=["Already updated."])])
+        self.assertEqual(review.status_for(review.open_counts(threads), True)[0], "failure")
+        _, resolutions, dropped = review.select_findings(
+            [{"kind": "resolve", "fp": fp, "reason": "The author confirmed the update is complete."}],
+            mode="incremental", pr_lines={path: {3}}, interdiff_lines={}, suppress={fp},
+        )
+        self.assertEqual(dropped, [])
+        self.assertEqual(review.close_addressed(self.env, threads, resolutions), 1)
+        reply = next(arg.removeprefix("body=") for arg in self.calls[0] if arg.startswith("body="))
+        self.assertIn(review.INSTALLER_COORDINATION_RESOLUTION, reply)
+        addressed = review.parse_threads([_thread(
+            fp, replies=["Already updated."], bot_replies=[reply],
+        )])
+        self.assertTrue(addressed[0].is_resolved)
+        self.assertEqual(review.open_counts(addressed)["should-fix"], 0)
+        self.assertEqual(review.status_for(review.open_counts(addressed), True)[0], "success")
+        self.assertIn(fp, review.suppressed_fps(addressed))
 
 
 class FindSummaryTest(TestCase):
@@ -284,15 +306,15 @@ class ParseAgentOutputTest(TestCase):
             self.assertIsNone(review.parse_agent_output(text), text)
 
 
-class InstallerReminderTest(TestCase):
+class InstallerCoordinationTest(TestCase):
     PATH = "install_builder/deadline-cloud-for-houdini.xml"
     OTHER_PATH = "installer/DeadlineCloudForHoudiniSubmitter.xml"
 
     def _finding(self, **kw):
         return _finding(
             path=kw.pop("path", self.PATH), line=kw.pop("line", 12),
-            severity=kw.pop("severity", "reminder"), category="design",
-            symbol=review.INSTALLER_REMINDER_SYMBOL,
+            severity=kw.pop("severity", "should-fix"), category="design",
+            symbol=review.INSTALLER_COORDINATION_SYMBOL,
             body="Please update a private repository: https://example.invalid/private-tracker",
             **kw,
         )
@@ -305,50 +327,50 @@ class InstallerReminderTest(TestCase):
             suppress=set(suppress),
         )
 
-    def test_reminder_is_public_and_non_blocking_in_both_modes(self):
+    def test_coordination_is_public_and_should_fix_in_both_modes(self):
         for mode in ("full", "incremental"):
             with self.subTest(mode=mode):
                 findings, _, dropped = self._select([self._finding(severity="blocking")], mode=mode)
                 self.assertEqual(dropped, [])
-                self.assertEqual(findings[0].severity, "reminder")
-                self.assertEqual(findings[0].body, review.INSTALLER_REMINDER_BODY)
+                self.assertEqual(findings[0].severity, "should-fix")
+                self.assertEqual(findings[0].body, review.INSTALLER_COORDINATION_BODY)
                 rendered = review.render_comment(findings[0])
-                self.assertTrue(rendered.startswith("**Reminder:**"))
+                self.assertTrue(rendered.startswith("**Should fix:**"))
                 self.assertNotIn("example.invalid", rendered)
-                self.assertEqual(review.parse_fp_marker(rendered), (findings[0].fp, "reminder"))
-                counts = review.open_counts(review.parse_threads([_thread(findings[0].fp, sev="reminder")]))
-                self.assertEqual(counts["reminder"], 1)
-                self.assertEqual(review.status_for(counts, True)[0], "success")
+                self.assertEqual(review.parse_fp_marker(rendered), (findings[0].fp, "should-fix"))
+                counts = review.open_counts(review.parse_threads([_thread(findings[0].fp)]))
+                self.assertEqual(counts["should-fix"], 1)
+                self.assertEqual(review.status_for(counts, True)[0], "failure")
 
-    def test_incremental_reminder_requires_a_newly_changed_line(self):
+    def test_incremental_coordination_requires_a_newly_changed_line(self):
         findings, _, dropped = self._select([self._finding(line=11)], mode="incremental")
         self.assertEqual(findings, [])
         self.assertEqual(len(dropped), 1)
 
-    def test_only_one_reminder_even_when_multiple_files_change(self):
+    def test_only_one_coordination_request_even_when_multiple_files_change(self):
         findings, _, dropped = self._select([self._finding(), self._finding(path=self.OTHER_PATH)])
         self.assertEqual(len(findings), 1)
         self.assertEqual(len(dropped), 1)
 
-    def test_reminder_is_suppressed_across_paths_and_outdated_threads(self):
-        fp = review.make_fp(self.OTHER_PATH, "design", review.INSTALLER_REMINDER_SYMBOL)
-        threads = review.parse_threads([_thread(fp, sev="reminder", outdated=True)])
+    def test_coordination_is_suppressed_across_paths_and_outdated_threads(self):
+        fp = review.make_fp(self.OTHER_PATH, "design", review.INSTALLER_COORDINATION_SYMBOL)
+        threads = review.parse_threads([_thread(fp, outdated=True)])
         findings, _, dropped = self._select([self._finding()], suppress=review.suppressed_fps(threads))
         self.assertEqual(findings, [])
         self.assertEqual(len(dropped), 1)
+        self.assertEqual(review.status_for(review.open_counts(threads), True)[0], "failure")
 
     def test_resolution_does_not_echo_reply_details(self):
-        fp = review.make_fp(self.PATH, "design", review.INSTALLER_REMINDER_SYMBOL)
-        _, resolutions, dropped = self._select(
-            [{"kind": "resolve", "fp": fp, "reason": "Tracked at https://example.invalid/private-tracker"}]
-        )
-        self.assertEqual(dropped, [])
-        self.assertEqual(resolutions[0].reason, review.INSTALLER_REMINDER_RESOLUTION)
-
-    def test_reminder_severity_is_reserved_for_the_coordination_check(self):
-        findings, _, dropped = self._select([_finding(severity="reminder", path=self.PATH, line=12)])
-        self.assertEqual(findings, [])
-        self.assertEqual(len(dropped), 1)
+        fp = review.make_fp(self.PATH, "design", review.INSTALLER_COORDINATION_SYMBOL)
+        for reason in (
+            "The author confirmed the update is already complete.",
+            "The author has a corresponding change under review at https://example.invalid/private-tracker.",
+        ):
+            with self.subTest(reason=reason):
+                _, resolutions, dropped = self._select([{"kind": "resolve", "fp": fp, "reason": reason}])
+                self.assertEqual(dropped, [])
+                self.assertEqual(resolutions[0].reason, review.INSTALLER_COORDINATION_RESOLUTION)
+                self.assertNotIn("example.invalid", resolutions[0].reason)
 
 
 class StatusAndSummaryTest(TestCase):
@@ -367,13 +389,14 @@ class StatusAndSummaryTest(TestCase):
         self.assertEqual(review.find_summary([{"id": 9, "user": {"login": "github-actions[bot]"}, "body": body}]), (9, SHA_A))
         self.assertIn("changes since `bbbbbbb`", body)
 
-    def test_summary_reports_reminder_without_blocking(self):
+    def test_summary_reports_required_coordination_as_should_fix(self):
         body = review.render_summary(
             reviewed_sha=SHA_A, head_sha=SHA_A, mode="full", since_sha=None, agent_ok=True,
-            counts={"blocking": 0, "should-fix": 0, "nit": 0, "reminder": 1}, posted=1, resolved=0, run_url="u",
+            counts={"blocking": 0, "should-fix": 1, "nit": 0}, posted=1, resolved=0, run_url="u",
         )
-        self.assertIn("1 reminder", body)
-        self.assertIn("✅ Nothing blocking.", body)
+        self.assertIn("1 should-fix", body)
+        self.assertIn("❌ Address or reply to the open threads.", body)
+        self.assertNotIn("✅ Nothing blocking.", body)
 
     def test_summary_without_baseline(self):
         body = review.render_summary(
