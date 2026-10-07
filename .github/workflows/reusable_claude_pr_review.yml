@@ -351,7 +351,7 @@ jobs:
         id: agent
         if: steps.meta.outputs.resolved == 'true'
         timeout-minutes: ${{ inputs.review_timeout_minutes }}
-        uses: anthropics/claude-code-action@0b1b62002952733671bde978d429b50b51c51c85 # v1.0.136
+        uses: anthropics/claude-code-action@58985842b834ed26087302ba27d07bc24ca8697a # v1.0.244
         env:
           AWS_BEARER_TOKEN_BEDROCK: ${{ env.AWS_BEARER_TOKEN_BEDROCK }}
           AWS_REGION: ${{ inputs.aws_region }}
@@ -364,6 +364,11 @@ jobs:
           # deliberately does not install that app.
           # This job's token is read-only (see the job's permissions).
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # v1.0.244+ checks write access for the workflow_run actor too, and
+          # for fork PRs that's the fork author, who never has it. Safe here:
+          # this job's token is read-only, Claude only gets read tools, and
+          # posting happens in the separate post job.
+          allowed_non_write_users: "*"
           prompt: |
             You are an automated, advisory code reviewer for a public AWS
             Deadline Cloud open-source repository. Review ONLY the changes in
@@ -435,6 +440,12 @@ jobs:
                         a changed or context line of pr.diff (in incremental
                         mode, of interdiff.diff). A high-level point that maps
                         to no single line goes on the most relevant changed line.
+              side      optional. `RIGHT` (the default) anchors to `line` in the
+                        head version. `LEFT` anchors to a removed line instead,
+                        with `line` its number in the base version (the `-`
+                        side of the pr.diff hunk header) -- use it only for a
+                        finding about removed code that has no new-side line,
+                        such as a deleted file.
               severity  blocking | should-fix | nit
               category  correctness | security | tests | docs | design
               symbol    the identifier the finding is about, plus a short slug
@@ -460,7 +471,7 @@ jobs:
             If there is nothing material to report, return empty lists.
           claude_args: |
             --model ${{ inputs.model_id }}
-            --json-schema '{"type":"object","additionalProperties":false,"required":["findings","resolutions"],"properties":{"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["path","line","severity","category","symbol","body"],"properties":{"path":{"type":"string"},"line":{"type":"integer"},"severity":{"type":"string","enum":["blocking","should-fix","nit"]},"category":{"type":"string"},"symbol":{"type":"string"},"body":{"type":"string"}}}},"resolutions":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["fp","reason"],"properties":{"fp":{"type":"string"},"reason":{"type":"string"}}}}}}'
+            --json-schema '{"type":"object","additionalProperties":false,"required":["findings","resolutions"],"properties":{"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["path","line","severity","category","symbol","body"],"properties":{"path":{"type":"string"},"line":{"type":"integer"},"severity":{"type":"string","enum":["blocking","should-fix","nit"]},"category":{"type":"string"},"symbol":{"type":"string"},"side":{"type":"string","enum":["RIGHT","LEFT"]},"body":{"type":"string"}}}},"resolutions":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["fp","reason"],"properties":{"fp":{"type":"string"},"reason":{"type":"string"}}}}}}'
             --allowedTools "Read,Glob,Grep,Bash(cat:*),Bash(head:*),Bash(wc:*),Bash(jq:*),Bash(git -C pr-head diff:*),Bash(git -C pr-head log:*),Bash(git -C pr-head show:*),Bash(git -C pr-head blame:*)"
 
       # Hand the agent's outcome and structured output to the post job,
@@ -481,10 +492,14 @@ jobs:
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: claude-review-${{ github.run_id }}-${{ github.run_attempt }}
+          # One name per run, not per attempt: re-running only a failed post
+          # job starts a new attempt that downloads the review job's artifact
+          # from the earlier one. A full re-run replaces it.
+          name: claude-review-${{ github.run_id }}
           path: review-context/
           retention-days: 1
           if-no-files-found: error
+          overwrite: true
 
   # Validate the agent's findings and post them as one review, resolve the
   # threads it judged addressed, then update the summary comment and the
@@ -501,7 +516,7 @@ jobs:
       - name: Download review results
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: claude-review-${{ github.run_id }}-${{ github.run_attempt }}
+          name: claude-review-${{ github.run_id }}
           path: review-context
 
       - name: Check out workflow tooling (review script)
