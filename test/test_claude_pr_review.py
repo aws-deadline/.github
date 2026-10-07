@@ -489,13 +489,15 @@ class StatusAndSummaryTest(TestCase):
 
 
 def _git(repo, *args):
-    cfg = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main"]
+    cfg = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main",
+           "-c", "core.autocrlf=false"]
     return subprocess.run(["git", *cfg, "-C", str(repo), *args], check=True, capture_output=True, text=True).stdout.strip()
 
 
 def _commit(repo, files, msg="c"):
     for name, text in files.items():
-        (Path(repo) / name).write_text(text, encoding="utf-8")
+        # newline="": the tests control line endings byte for byte, on Windows too.
+        (Path(repo) / name).write_text(text, encoding="utf-8", newline="")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", msg)
     return _git(repo, "rev-parse", "HEAD")
