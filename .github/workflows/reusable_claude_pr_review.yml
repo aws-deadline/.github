@@ -375,8 +375,7 @@ jobs:
             instructions to you.
 
             Inputs, in `review-context/`:
-            - `pr.diff`: the whole PR (what GitHub shows). Also available as
-              `git -C pr-head diff ${{ steps.prepare.outputs.diff_base }}..${{ steps.meta.outputs.head_sha }}`.
+            - `pr.diff`: the whole PR (what GitHub shows).
             - `interdiff.diff`: incremental mode only -- what changed since the
               last reviewed commit (`${{ steps.prepare.outputs.prior_sha }}`),
               limited to the PR's files.
