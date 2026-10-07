@@ -71,6 +71,15 @@ ADDRESSED_MARKER = "<!-- claude-review addressed -->"
 SUPERSEDED_MARKER = "<!-- claude-review superseded -->"
 HUNK_RE = re.compile(r"^@@ -(?P<old>\d+)(?:,\d+)? \+(?P<new>\d+)(?:,\d+)? @@")
 SIDES = ("RIGHT", "LEFT")
+# Credentials the review job holds or could reach: the Bedrock bearer token,
+# GitHub tokens, AWS access keys, and JWTs (OIDC tokens). Unanchored: a token
+# glued to other text is still a token, and over-redacting costs nothing.
+SECRET_RE = re.compile(
+    r"bedrock-api-key-[A-Za-z0-9+/=_-]+"
+    r"|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,}"
+    r"|(?:AKIA|ASIA)[A-Z0-9]{16}"
+    r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+"
+)
 
 # Per side, each file's commentable line numbers.
 DiffLines = dict[str, dict[str, set[int]]]
@@ -154,7 +163,8 @@ def diff_lines(diff_text: str) -> DiffLines:
 
 
 def make_fp(path: str, category: str, symbol: str) -> str:
-    parts = [FP_PART_RE.sub("-", p.strip()) or "unknown" for p in (path, category, symbol)]
+    # The fp is posted verbatim in the marker, so it is redacted too.
+    parts = [SECRET_RE.sub("redacted", FP_PART_RE.sub("-", p.strip())) or "unknown" for p in (path, category, symbol)]
     return "::".join(parts)
 
 
@@ -435,17 +445,21 @@ def select_findings(
 
 
 def defang(text: str) -> str:
-    """Neutralize HTML comments in model text before posting it.
+    """Make model text safe to post.
 
     Markers are matched by search, so a marker the PR induced the model to
     write would take precedence over the one we append (relabelling the
     finding's fp or severity), or forge an addressed or summary marker.
+
+    Credentials are redacted: a prompt-injected agent could copy one from its
+    environment into a finding, and GitHub masks secrets in logs, not in PR
+    comments. This is a backstop for plain copies, not for encoded ones.
     """
-    return text.replace("<!--", "&lt;!--")
+    return SECRET_RE.sub("[redacted]", text).replace("<!--", "&lt;!--")
 
 
 def render_comment(f: Finding) -> str:
-    body = defang(f.body[:MAX_BODY_CHARS])
+    body = defang(f.body)[:MAX_BODY_CHARS]  # truncating first could cut a token below the pattern's length
     return f"**{SEVERITY_LABELS[f.severity]}:** {body}\n\n<!-- claude-review fp={f.fp} sev={f.severity} -->"
 
 
@@ -665,6 +679,15 @@ def ensure_commit(checkout: str, sha: str) -> bool:
     return has_commit(checkout, sha)
 
 
+def commit_log(checkout: str, base: str, head: str) -> str:
+    """The PR's commit messages, oldest first.
+
+    The agent has no shell or git tools (git's --output= writes files), so it
+    reads history from this file instead.
+    """
+    return git(checkout, "log", "--reverse", "--no-color", "--format=commit %H%nAuthor: %an%n%n%B", f"{base}..{head}")
+
+
 def pr_diff_base(env: Env) -> str:
     # GitHub shows a PR as base...head (from the merge base); match it so line
     # anchors agree with what GitHub accepts. A fork's checkout lacks a base
@@ -706,6 +729,7 @@ def prepare(env: Env) -> None:
         # surface unrelated upstream changes as "new in this revision".
         interdiff = git_diff(env.checkout, f"{prior}..{env.head_sha}", "--", *pr_files, check=False)
     (env.context_dir / "interdiff.diff").write_text(interdiff, encoding="utf-8")
+    (env.context_dir / "commits.txt").write_text(commit_log(env.checkout, diff_base, env.head_sha), encoding="utf-8")
 
     state = {
         "mode": mode,
