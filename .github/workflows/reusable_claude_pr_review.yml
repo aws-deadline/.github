@@ -364,6 +364,11 @@ jobs:
           # deliberately does not install that app.
           # This job's token is read-only (see the job's permissions).
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # v1.0.244+ checks write access for the workflow_run actor too, and
+          # for fork PRs that's the fork author, who never has it. Safe here:
+          # this job's token is read-only, Claude only gets read tools, and
+          # posting happens in the separate post job.
+          allowed_non_write_users: "*"
           prompt: |
             You are an automated, advisory code reviewer for a public AWS
             Deadline Cloud open-source repository. Review ONLY the changes in
