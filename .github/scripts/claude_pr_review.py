@@ -189,6 +189,10 @@ def parse_threads(nodes: Iterable[dict[str, Any]]) -> list[Thread]:
     threads = []
     for node in nodes:
         comments = (node.get("comments") or {}).get("nodes") or []
+        # A long thread is fetched as its first and its latest comments.
+        seen = {c.get("databaseId") for c in comments}
+        latest = (node.get("latest") or {}).get("nodes") or []
+        comments = comments + [c for c in latest if c.get("databaseId") not in seen]
         if not comments:
             continue
         # Anyone can open a review thread, and the fp format is predictable:
@@ -564,6 +568,7 @@ query($owner:String!,$repo:String!,$pr:Int!,$cursor:String){
         nodes{
           id isResolved isOutdated path line
           comments(first:20){ nodes{ databaseId body author{ login } } }
+          latest: comments(last:20){ nodes{ databaseId body author{ login } } }
         }
       }
     }

@@ -186,6 +186,28 @@ class AddressedTest(TestCase):
         self.assertEqual(review.open_counts(threads)["should-fix"], 1)
 
 
+class FetchThreadsTest(TestCase):
+    def test_sees_an_addressed_marker_past_the_first_comments(self):
+        node = _thread("a.py::c::long", replies=[f"reply {i}" for i in range(30)],
+                       bot_replies=[f"Addressed: x\n\n{review.ADDRESSED_MARKER}"])
+        comments = node.pop("comments")["nodes"]
+        for i, c in enumerate(comments):
+            c["databaseId"] = i
+
+        def fake_gh(*args, input_json=None, check=True):
+            query = args[2]
+            served = dict(node, comments={"nodes": comments[:20]})
+            if "latest: comments(last:" in query:
+                served["latest"] = {"nodes": comments[-20:]}
+            return {"data": {"repository": {"pullRequest": {"reviewThreads": {
+                "pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": [served]}}}}}
+
+        with mock.patch.object(review, "gh", fake_gh):
+            threads = review.fetch_threads("o/r", 1)
+        self.assertTrue(threads[0].is_resolved)
+        self.assertEqual(len(threads[0].replies), 31)
+
+
 class CloseAddressedTest(TestCase):
     def setUp(self):
         self.calls = []
