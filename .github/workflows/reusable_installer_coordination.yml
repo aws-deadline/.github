@@ -1,0 +1,60 @@
+# Call only from trusted pull_request_target / issue_comment workflows.
+# Only central tooling is checked out; PR contents are read as API data and
+# never executed. The token writes only the public question and PR-head status.
+name: Installer Coordination
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: "PR number from the server-provided event payload."
+        required: true
+        type: string
+      base_branch:
+        description: "Only check open PRs targeting this branch."
+        type: string
+        default: mainline
+      tooling_repository:
+        description: "Repository containing the checker. Override only for testing."
+        type: string
+        default: aws-deadline/.github
+      tooling_ref:
+        description: "Checker revision. Override only for testing."
+        type: string
+        default: mainline
+
+permissions: {}
+
+jobs:
+  check:
+    name: Confirm shared installer follow-up
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+      statuses: write
+    steps:
+      - name: Check out central tooling
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ inputs.tooling_repository }}
+          ref: ${{ inputs.tooling_ref }}
+          persist-credentials: false
+          sparse-checkout: .github/scripts/check_installer_coordination.py
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Check shared installer coordination
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          BASE_BRANCH: ${{ inputs.base_branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python .github/scripts/check_installer_coordination.py
