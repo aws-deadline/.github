@@ -271,6 +271,21 @@ class SelectFindingsTest(TestCase):
         )
         self.assertEqual(dropped, [])
 
+    def test_suffix_never_collides_with_a_literal_symbol(self):
+        findings, _, _ = self._select([_finding(), _finding(body="Other."), _finding(symbol="new-2", body="Literal.")])
+        self.assertEqual(
+            [f.fp for f in findings],
+            ["src/app.py::correctness::new", "src/app.py::correctness::new-2", "src/app.py::correctness::new-2-2"],
+        )
+
+    def test_suffixed_finding_survives_when_only_the_first_already_landed(self):
+        findings, _, dropped = review.select_findings(
+            [_finding(), _finding(body="Other bug.")], mode="full", pr_lines=self.PR_LINES,
+            interdiff_lines=self.INTERDIFF, suppress=set(), live={"src/app.py::correctness::new"},
+        )
+        self.assertEqual([f.fp for f in findings], ["src/app.py::correctness::new-2"])
+        self.assertEqual(len(dropped), 1)
+
     def test_incremental_rules(self):
         findings, _, dropped = self._select(
             [
@@ -374,6 +389,7 @@ class PostTest(TestCase):
         self.live = []  # thread nodes on the PR
         self.calls = []
         self.fail_posts = set()  # paths whose comments GitHub rejects
+        self.fail_bodies = set()  # comments GitHub rejects when the body contains one of these
         self.summary_body = None
 
         def fake_gh(*args, input_json=None, check=True):
@@ -385,13 +401,13 @@ class PostTest(TestCase):
                 return {"data": {"repository": {"pullRequest": {"reviewThreads": {
                     "pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": list(self.live)}}}}}
             if path.endswith("/reviews"):
-                if any(c["path"] in self.fail_posts for c in input_json["comments"]):
+                if any(self._rejects(c) for c in input_json["comments"]):
                     return None
                 for c in input_json["comments"]:
                     self._land(c)
                 return {}
             if path.endswith("/pulls/1/comments"):
-                if input_json["path"] in self.fail_posts:
+                if self._rejects(input_json):
                     return None
                 self._land(input_json)
                 return {}
@@ -412,6 +428,9 @@ class PostTest(TestCase):
     def tearDown(self):
         review.gh = self._orig
         self.tmp.cleanup()
+
+    def _rejects(self, comment):
+        return comment["path"] in self.fail_posts or any(b in comment["body"] for b in self.fail_bodies)
 
     def _land(self, comment):
         self.live.append({
@@ -457,6 +476,16 @@ class PostTest(TestCase):
         self.fail_posts = set()
         self._post(findings)  # same artifact, prepare-time suppress list is stale
         self.assertEqual(self._posted_paths(), ["src/app.py", "new.py"])
+        self.assertIn(f"reviewed={SHA_A}", self.summary_body)
+
+    def test_rerun_after_partial_post_keeps_a_suffixed_finding(self):
+        findings = [_finding(), _finding(body="Second bug on the same symbol.")]
+        self.fail_bodies = {"Second bug"}
+        self._post(findings)
+        self.fail_bodies = set()
+        self._post(findings)
+        fps = [review.parse_fp_marker(n["comments"]["nodes"][0]["body"])[0] for n in self.live]
+        self.assertEqual(fps, ["src/app.py::correctness::new", "src/app.py::correctness::new-2"])
         self.assertIn(f"reviewed={SHA_A}", self.summary_body)
 
 

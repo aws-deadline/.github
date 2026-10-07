@@ -296,6 +296,7 @@ def select_findings(
     pr_lines: DiffLines,
     interdiff_lines: DiffLines,
     suppress: set[str],
+    live: set[str] = frozenset(),
 ) -> tuple[list[Finding], list[Resolution], list[str]]:
     """Validate the agent's output and apply the posting rules.
 
@@ -305,6 +306,10 @@ def select_findings(
     - Its fp must not already be suppressed. Two findings in one run that
       share an fp are distinct issues on the same symbol (the agent does not
       repeat itself within a run), so later ones get a numeric suffix.
+      Suffixes skip only `suppress`, the threads seen when the review began,
+      so a re-run of the post job names each finding the same way. `live`
+      holds the threads on the PR now; a finding whose final fp is among
+      them already landed (in an earlier attempt of this job) and is dropped.
     - Incremental reviews post no nits, and post should-fix findings only on
       lines this revision changed; blocking findings may land anywhere in the
       PR diff, since a missed blocker is worth raising late. Old-side line
@@ -364,6 +369,9 @@ def select_findings(
             while fp in seen or fp in suppress:
                 fp, n = f"{base}-{n}", n + 1
             seen.add(fp)
+            if fp in live:
+                dropped.append(f"{fp} ({path}:{line}): already posted")
+                continue
             findings.append(Finding(path=path, line=line, severity=severity, fp=fp, body=body, side=side))
     return findings, resolutions, dropped
 
@@ -689,9 +697,9 @@ def close_addressed(env: Env, threads: list[Thread], resolutions: list[Resolutio
 def post(env: Env, *, agent_ok: bool, agent_output: str, mode: str, prior_sha: str | None) -> None:
     state_path = env.context_dir / "prior-review-state.json"
     suppress = set(json.loads(state_path.read_text(encoding="utf-8"))["suppress"]) if state_path.exists() else set()
-    # Also suppress what is on the PR now: a re-run of this job after a
-    # partial post must not post the findings that did land a second time.
-    suppress |= suppressed_fps(fetch_threads(env.repo, env.pr))
+    # What is on the PR now: a re-run of this job after a partial post must not
+    # post the findings that did land a second time.
+    live = suppressed_fps(fetch_threads(env.repo, env.pr))
     pr_lines = diff_lines((env.context_dir / "pr.diff").read_text(encoding="utf-8"))
     interdiff_path = env.context_dir / "interdiff.diff"
     interdiff_lines = diff_lines(interdiff_path.read_text(encoding="utf-8") if interdiff_path.exists() else "")
@@ -704,7 +712,7 @@ def post(env: Env, *, agent_ok: bool, agent_output: str, mode: str, prior_sha: s
         parsed = ([], [])
     records, errors = parsed
     findings, resolutions, dropped = select_findings(
-        records, mode=mode, pr_lines=pr_lines, interdiff_lines=interdiff_lines, suppress=suppress
+        records, mode=mode, pr_lines=pr_lines, interdiff_lines=interdiff_lines, suppress=suppress, live=live
     )
     for msg in errors + dropped:
         print(f"skipped: {msg}")
