@@ -571,21 +571,38 @@ def has_commit(checkout: str, sha: str) -> bool:
     return subprocess.run(["git", "-C", checkout, "cat-file", "-e", f"{sha}^{{commit}}"], capture_output=True).returncode == 0
 
 
+def fetch_commit(checkout: str, sha: str) -> str:
+    """Fetch a commit by SHA; return git's error, or "" on success."""
+    proc = subprocess.run(["git", "-C", checkout, "fetch", "--quiet", "origin", sha], capture_output=True)
+    return "" if proc.returncode == 0 else " ".join(proc.stderr.decode("utf-8", "replace").split())
+
+
 def ensure_commit(checkout: str, sha: str) -> bool:
     if has_commit(checkout, sha):
         return True
     # A force-pushed-away commit is not reachable from the checkout's refs, but
     # GitHub still serves it by SHA. Private repos fail here (no credentials are
-    # persisted), which just falls back to a full review.
-    subprocess.run(["git", "-C", checkout, "fetch", "--quiet", "origin", sha], capture_output=True)
+    # persisted): a missing prior commit just means a full review.
+    fetch_commit(checkout, sha)
     return has_commit(checkout, sha)
 
 
 def pr_diff_base(env: Env) -> str:
     # GitHub shows a PR as base...head (from the merge base); match it so line
-    # anchors agree with what GitHub accepts.
+    # anchors agree with what GitHub accepts. A fork's checkout lacks a base
+    # that moved on upstream; fetching it in full (never shallow) connects its
+    # history to the head's. A base that cannot be fetched (as on a private
+    # repo, where no credentials are persisted) fails the review.
+    fetch_error = "" if has_commit(env.checkout, env.base_sha) else fetch_commit(env.checkout, env.base_sha)
     mb = git(env.checkout, "merge-base", env.base_sha, env.head_sha, check=False).strip()
-    return mb if SHA_RE.match(mb) else env.base_sha
+    if not SHA_RE.match(mb):
+        # Diffing from the base instead would show every upstream change since
+        # the fork point as reverted by the PR.
+        raise SystemExit(
+            f"::error::no merge base of {env.base_sha} and {env.head_sha} (missing or shallow history)"
+            + (f"; fetching the base failed: {fetch_error}" if fetch_error else "")
+        )
+    return mb
 
 
 def prepare(env: Env) -> None:

@@ -249,25 +249,6 @@ jobs:
         if: steps.meta.outputs.resolved == 'true'
         run: find pr-head -type l -delete
 
-      # Add the base commit so the agent can compute the review diff with
-      # `git diff $BASE_SHA..HEAD`. No PR code is executed.
-      #
-      # The checkout above uses fetch-depth: 0, so the base commit is normally
-      # already present and no fetch is needed. Only fetch when it genuinely is
-      # not: the checkout sets persist-credentials: false (deliberately -- no
-      # token is left on disk for the agent to read), so on a private repo an
-      # unconditional fetch fails with "could not read Username for
-      # 'https://github.com'". Public repos fetch anonymously and never hit this.
-      - name: Fetch base commit for diff
-        if: steps.meta.outputs.resolved == 'true'
-        working-directory: pr-head
-        env:
-          BASE_SHA: ${{ steps.meta.outputs.base_sha }}
-        run: |
-          set -euo pipefail
-          git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null \
-            || git fetch --depth=1 origin "$BASE_SHA"
-
       # A reusable workflow does not check out its own repository -- the only
       # checkout above is the PR head under pr-head/. So the pinned requirements
       # file and review script that live alongside this workflow are not on
@@ -289,6 +270,12 @@ jobs:
       # this bot's open threads. Done here, deterministically, rather than
       # spending agent turns on API plumbing. See
       # .github/scripts/claude_pr_review.py for the state it reads.
+      #
+      # It also fetches the base commit when the checkout lacks it (a fork PR
+      # whose base moved on upstream), in full: a --depth=1 fetch would leave
+      # the base a parentless root with no merge base, and a private repo
+      # fetches nothing (persist-credentials is false), so the step fails
+      # rather than diffing from the wrong commit.
       - name: Prepare review context
         id: prepare
         if: steps.meta.outputs.resolved == 'true'

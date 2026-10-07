@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from unittest import TestCase, main as unittest_main
 
@@ -371,6 +373,68 @@ class StatusAndSummaryTest(TestCase):
         self.assertIn("reviewed=none", body)
         self.assertIn("did not finish", body)
         self.assertNotIn("✅", body)
+
+
+def _git(repo, *args):
+    cfg = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main"]
+    return subprocess.run(["git", *cfg, "-C", str(repo), *args], check=True, capture_output=True, text=True).stdout.strip()
+
+
+def _commit(repo, files, msg="c"):
+    for name, text in files.items():
+        (Path(repo) / name).write_text(text, encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", msg)
+    return _git(repo, "rev-parse", "HEAD")
+
+
+class ForkPrTest(TestCase):
+    """A fork PR whose base moved on upstream since the fork point.
+
+    U is upstream, F the fork (which, like GitHub, serves U's commits by sha
+    without advertising them), C the read-only checkout of the PR head.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        d = Path(self.tmp.name)
+        u, f, self.c = d / "U", d / "F", d / "C"
+        _git(d, "init", "-q", str(u))
+        self.fork_point = _commit(u, {"f.txt": "1\n"})
+        _git(d, "clone", "-q", f"file://{u}", str(f))
+        _git(f, "config", "uploadpack.allowAnySHA1InWant", "true")
+        _git(f, "checkout", "-qb", "pr")
+        head = _commit(f, {"p.txt": "p\n"})
+        base = _commit(u, {"f.txt": "1\n2\n"}, "upstream moves on")
+        _git(f, "fetch", "-q", "origin", "main:refs/upstream/main")
+        _git(d, "clone", "-q", f"file://{f}", str(self.c))
+        _git(self.c, "checkout", "-q", "pr")
+        self.env = review.Env(
+            repo="o/r", pr=1, head_sha=head, base_sha=base, checkout=str(self.c),
+            context_dir=d / "ctx", run_url="u",
+        )
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_fetches_missing_base_and_diffs_from_the_merge_base(self):
+        self.assertFalse(review.has_commit(str(self.c), self.env.base_sha))
+        self.assertEqual(review.pr_diff_base(self.env), self.fork_point)
+
+    def test_no_merge_base_fails_instead_of_two_dot_diffing(self):
+        # A --depth=1 fetch makes the base a parentless root.
+        _git(self.c, "fetch", "-q", "--depth=1", "origin", self.env.base_sha)
+        with self.assertRaises(SystemExit):
+            review.pr_diff_base(self.env)
+
+    def test_failed_base_fetch_is_reported(self):
+        # As when a private repo's checkout has no credentials to fetch with.
+        _git(self.c, "remote", "set-url", "origin", str(Path(self.tmp.name) / "missing"))
+        with self.assertRaises(SystemExit) as cm:
+            review.pr_diff_base(self.env)
+        msg = str(cm.exception)
+        self.assertIn("does not appear to be a git repository", msg)
+        self.assertNotIn("\n", msg)
 
 
 class PostTest(TestCase):
