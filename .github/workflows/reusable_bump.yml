@@ -79,6 +79,8 @@ jobs:
       - name: GenerateChangeLog
         env:
           REPO_NAME: ${{ github.event.repository.name }}
+          # The script reads PR descriptions with `gh pr view`, which needs a token in Actions.
+          GH_TOKEN: ${{ github.token }}
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0)
           NOTES=$(python .dot-github/.github/scripts/generate_release_notes.py "$NEXT_SEMVER" --since "$PREV_TAG" --repo "$REPO_NAME")

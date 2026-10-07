@@ -143,6 +143,10 @@ def get_pr_descriptions(commits: list[dict]) -> dict[str, str]:
         )
         if result.returncode == 0 and result.stdout.strip():
             descriptions[pr] = result.stdout.strip()[:2000]
+        elif result.returncode != 0:
+            # Notes are still generated from commits alone, but say why the
+            # PR context is missing (e.g. no GH_TOKEN in Actions).
+            print(f"Warning: could not fetch PR #{pr}: {result.stderr.strip()}", file=sys.stderr)
     return descriptions
 
 

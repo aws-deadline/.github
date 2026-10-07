@@ -5,8 +5,10 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import subprocess
 import sys
 import types
+from contextlib import redirect_stderr
 from pathlib import Path
 from unittest import TestCase, main as unittest_main
 
@@ -92,6 +94,32 @@ class InvokeBedrockTest(TestCase):
         with self.assertRaises(RuntimeError):
             self._run({"content": [], "stop_reason": "refusal"})
         self.assertEqual(len(self.client.requests), 1)
+
+
+class GetPrDescriptionsTest(TestCase):
+    def setUp(self):
+        self._orig_run = notes.subprocess.run
+
+    def tearDown(self):
+        notes.subprocess.run = self._orig_run
+
+    def _run(self, result):
+        notes.subprocess.run = lambda args, **kw: subprocess.CompletedProcess(args, *result)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            descriptions = notes.get_pr_descriptions([{"subject": "feat: a thing (#12)"}])
+        return descriptions, stderr.getvalue()
+
+    def test_fetched_description_is_returned(self):
+        descriptions, stderr = self._run((0, "Title\nBody", ""))
+        self.assertEqual(descriptions, {"12": "Title\nBody"})
+        self.assertEqual(stderr, "")
+
+    def test_gh_failure_is_warned_not_silent(self):
+        descriptions, stderr = self._run((4, "", "gh: To use GitHub CLI in a GitHub Actions workflow, set the GH_TOKEN environment variable.\n"))
+        self.assertEqual(descriptions, {})
+        self.assertIn("#12", stderr)
+        self.assertIn("set the GH_TOKEN environment variable", stderr)
 
 
 if __name__ == "__main__":
