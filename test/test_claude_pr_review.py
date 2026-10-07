@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from unittest import TestCase, main as unittest_main
+from unittest import TestCase, main as unittest_main, mock
 
 SCRIPT_PATH = Path(__file__).parents[1] / ".github" / "scripts" / "claude_pr_review.py"
 SPEC = importlib.util.spec_from_file_location("claude_pr_review", SCRIPT_PATH)
@@ -435,6 +436,65 @@ class ForkPrTest(TestCase):
         msg = str(cm.exception)
         self.assertIn("does not appear to be a git repository", msg)
         self.assertNotIn("\n", msg)
+
+
+class PrepareTest(TestCase):
+    """prepare() over a real checkout, against a fake GitHub."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        d = Path(self.tmp.name)
+        self.repo = d / "pr-head"
+        _git(d, "init", "-q", str(self.repo))
+        self.base = _commit(self.repo, {"a.py": "1\n"})
+        self.prior = _commit(self.repo, {"a.py": "1\n2\n"})
+        self.out = d / "github-output"
+
+        def fake_gh(*args, input_json=None, check=True):
+            if args[0] == "graphql":
+                return {"data": {"repository": {"pullRequest": {"reviewThreads": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": []}}}}}
+            if args[0] == "--paginate":
+                return [[{"id": 5, "user": {"login": "github-actions[bot]"},
+                          "body": f"<!-- claude-review-summary reviewed={self.prior} -->"}]]
+            raise AssertionError(f"unexpected gh call {args}")
+
+        self._orig = review.gh
+        review.gh = fake_gh
+
+    def tearDown(self):
+        review.gh = self._orig
+        self.tmp.cleanup()
+
+    def _prepare(self, files):
+        head = _commit(self.repo, files)
+        env = review.Env(
+            repo="o/r", pr=1, head_sha=head, base_sha=self.base, checkout=str(self.repo),
+            context_dir=Path(self.tmp.name) / "ctx", run_url="u",
+        )
+        with mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(self.out)}):
+            review.prepare(env)
+        return {name: review.diff_lines((env.context_dir / name).read_text(encoding="utf-8"))["RIGHT"]
+                for name in ("pr.diff", "interdiff.diff")}
+
+    def test_pr_gitattributes_cannot_hide_the_diff(self):
+        diffs = self._prepare({"a.py": "1\n2\n3\n", ".gitattributes": "* -diff\n"})
+        self.assertEqual(diffs["pr.diff"]["a.py"], {1, 2, 3})
+        self.assertEqual(diffs["interdiff.diff"]["a.py"], {1, 2, 3})
+
+    def test_binary_file_is_not_fatal(self):
+        # git's own binary detection still applies; only the PR's
+        # .gitattributes are ignored, so `* -diff` cannot hide a text file.
+        (self.repo / "logo.png").write_bytes(b"\x89PNG\xff\xfe\x00\n" * 50)
+        diffs = self._prepare({"a.py": "1\n2\n3\n", ".gitattributes": "* -diff\n"})
+        self.assertEqual(diffs["pr.diff"]["a.py"], {1, 2, 3})
+        self.assertNotIn("logo.png", diffs["pr.diff"])
+        pr_diff = (Path(self.tmp.name) / "ctx" / "pr.diff").read_text(encoding="utf-8")
+        self.assertIn("Binary files /dev/null and b/logo.png differ", pr_diff)
+
+    def test_file_name_is_not_a_pathspec(self):
+        diffs = self._prepare({"a.py": "1\n2\n3\n", ":(exclude)*": "x\n"})
+        self.assertEqual(diffs["interdiff.diff"]["a.py"], {1, 2, 3})
 
 
 class PostTest(TestCase):

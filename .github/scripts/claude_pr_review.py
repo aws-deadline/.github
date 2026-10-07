@@ -476,10 +476,26 @@ def gh(*args: str, input_json: Any = None, check: bool = True) -> Any:
 
 
 def git(repo: str, *args: str, check: bool = True) -> str:
-    proc = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True)
+    proc = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
     if check and proc.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} failed: {proc.stderr.strip()}")
     return proc.stdout if proc.returncode == 0 else ""
+
+
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git hash-object -t tree /dev/null
+
+
+def git_diff(repo: str, *args: str, check: bool = True) -> str:
+    # The checkout is the PR's: its .gitattributes must not turn files into
+    # "Binary files differ" (hiding them from review) or pick a diff driver,
+    # and its file names must not be read as pathspec magic like ":(exclude)*".
+    # Reading attributes from the empty tree (git >= 2.40) ignores the PR's
+    # .gitattributes while keeping git's own binary detection, which --text
+    # would also disable, flooding pr.diff with binary content.
+    return git(
+        repo, "--literal-pathspecs", f"--attr-source={EMPTY_TREE}",
+        "diff", "--no-ext-diff", "--no-textconv", *args, check=check,
+    )
 
 
 THREADS_QUERY = """
@@ -613,7 +629,7 @@ def prepare(env: Env) -> None:
     prior = summary[1] if summary else None
 
     diff_base = pr_diff_base(env)
-    pr_diff = git(env.checkout, "diff", f"{diff_base}..{env.head_sha}")
+    pr_diff = git_diff(env.checkout, f"{diff_base}..{env.head_sha}")
     (env.context_dir / "pr.diff").write_text(pr_diff, encoding="utf-8")
     pr_files = sorted({p for side in diff_lines(pr_diff).values() for p in side})
 
@@ -626,7 +642,7 @@ def prepare(env: Env) -> None:
     if mode == "incremental" and pr_files:
         # Restrict to the PR's files so a rebase onto a newer base does not
         # surface unrelated upstream changes as "new in this revision".
-        interdiff = git(env.checkout, "diff", f"{prior}..{env.head_sha}", "--", *pr_files, check=False)
+        interdiff = git_diff(env.checkout, f"{prior}..{env.head_sha}", "--", *pr_files, check=False)
     (env.context_dir / "interdiff.diff").write_text(interdiff, encoding="utf-8")
 
     state = {
