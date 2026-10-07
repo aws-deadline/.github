@@ -560,6 +560,8 @@ class PostTest(TestCase):
         self.fail_bodies = set()  # comments GitHub rejects when the body contains one of these
         self.summary_body = None
         self.replied = []  # comment ids replied to
+        self.pr_head = SHA_A
+        self.status = None
 
         def fake_gh(*args, input_json=None, check=True):
             self.calls.append((args, input_json))
@@ -590,6 +592,8 @@ class PostTest(TestCase):
                     return None
                 self._land(input_json)
                 return {}
+            if path == "repos/o/r/pulls/1":
+                return {"head": {"sha": self.pr_head}}
             if path == "--paginate":
                 prior = f"<!-- claude-review-summary reviewed={SHA_B} -->"
                 return [[{"id": 5, "user": {"login": "github-actions[bot]"}, "body": prior}]]
@@ -673,6 +677,11 @@ class PostTest(TestCase):
         (self.ctx / "pr.diff").write_bytes(diff.encode("utf-8"))
         self._post([_finding(path="cr.py", line=3)])  # past the end: snaps to line 2
         self.assertEqual([n["line"] for n in self.live], [2])
+
+    def test_stale_rerun_does_not_touch_the_pr(self):
+        self.pr_head = "c" * 40  # pushed since this run's review job
+        self._post([_finding()])
+        self.assertEqual((self.live, self.summary_body, self.status), ([], None, None))
 
     def test_reraised_outdated_thread_is_superseded(self):
         old = _thread("src/app.py::correctness::new", outdated=True)

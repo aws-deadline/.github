@@ -801,6 +801,14 @@ def close_addressed(env: Env, threads: list[Thread], resolutions: list[Resolutio
 
 
 def post(env: Env, *, agent_ok: bool, agent_output: str, mode: str, prior_sha: str | None) -> None:
+    # A re-run of an older run's post job must not move the summary's baseline
+    # back to its commit, nor resolve threads on code since replaced. Its
+    # findings are not lost: the newer head's run reviews from the baseline
+    # this run never advanced.
+    pr_head = ((gh(f"repos/{env.repo}/pulls/{env.pr}") or {}).get("head") or {}).get("sha")
+    if pr_head != env.head_sha:
+        print(f"::notice::{env.head_sha} is no longer the PR head ({pr_head}); a newer push supersedes it, skipping.")
+        return
     state_path = env.context_dir / "prior-review-state.json"
     suppress = set(json.loads(state_path.read_text(encoding="utf-8"))["suppress"]) if state_path.exists() else set()
     # What is on the PR now: a re-run of this job after a partial post must not
