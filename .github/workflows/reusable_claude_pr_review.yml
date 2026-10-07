@@ -318,7 +318,7 @@ jobs:
       # role-duration-seconds bounds the token's lifetime to about an hour.
       - name: Configure AWS credentials (OIDC, mint scope only)
         if: steps.meta.outputs.resolved == 'true'
-        uses: aws-actions/configure-aws-credentials@254c19bd240aabef8777f48595e9d2d7b972184b # v6.0.0
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.0.0
         with:
           role-to-assume: ${{ secrets.bedrock_role_arn }}
           aws-region: ${{ inputs.aws_region }}
