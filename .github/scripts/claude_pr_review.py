@@ -718,8 +718,10 @@ def commit_log(checkout: str, base: str, head: str) -> str:
 
 def write_diff(context_dir: Path, name: str, diff: str) -> None:
     """Save `<name>.raw.diff` for the post job and a numbered `<name>.diff` for the agent."""
-    (context_dir / f"{name}.raw.diff").write_text(diff, encoding="utf-8")
-    (context_dir / f"{name}.diff").write_text(numbered_diff(diff), encoding="utf-8")
+    # newline="": post reads these back as bytes, so they must hold git's "\n"
+    # exactly, not the platform's line ending.
+    (context_dir / f"{name}.raw.diff").write_text(diff, encoding="utf-8", newline="")
+    (context_dir / f"{name}.diff").write_text(numbered_diff(diff), encoding="utf-8", newline="")
 
 
 def pr_diff_base(env: Env) -> str:

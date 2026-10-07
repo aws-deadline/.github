@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from unittest import TestCase, main as unittest_main, mock
+from unittest import TestCase, main as unittest_main, mock, skipIf
 
 SCRIPT_PATH = Path(__file__).parents[1] / ".github" / "scripts" / "claude_pr_review.py"
 SPEC = importlib.util.spec_from_file_location("claude_pr_review", SCRIPT_PATH)
@@ -621,6 +621,7 @@ class PrepareTest(TestCase):
         diffs = self._prepare({"sp ace.py": "x\n", "café.py": "x\n"})
         self.assertEqual((diffs["interdiff.raw.diff"]["sp ace.py"], diffs["interdiff.raw.diff"]["café.py"]), ({1}, {1}))
 
+    @skipIf(os.name == "nt", "Windows file names cannot contain ':' or '*'")
     def test_file_name_is_not_a_pathspec(self):
         diffs = self._prepare({"a.py": "1\n2\n3\n", ":(exclude)*": "x\n"})
         self.assertEqual(diffs["interdiff.raw.diff"]["a.py"], {1, 2, 3})
@@ -655,7 +656,7 @@ class PostTest(TestCase):
 
         self.tmp = tempfile.TemporaryDirectory()
         self.ctx = Path(self.tmp.name)
-        (self.ctx / "pr.raw.diff").write_text(DIFF, encoding="utf-8")
+        (self.ctx / "pr.raw.diff").write_text(DIFF, encoding="utf-8", newline="")
         (self.ctx / "prior-review-state.json").write_text(json.dumps({"suppress": []}), encoding="utf-8")
         self.env = review.Env(
             repo="o/r", pr=1, head_sha=SHA_A, base_sha=SHA_B, checkout="pr-head", context_dir=self.ctx, run_url="u",
