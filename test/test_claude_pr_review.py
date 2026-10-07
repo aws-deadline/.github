@@ -161,6 +161,16 @@ class ThreadStateTest(TestCase):
     def test_open_counts(self):
         self.assertEqual(review.open_counts(self.threads), {"blocking": 0, "should-fix": 3, "nit": 1})
 
+    def test_superseded_skips_a_suffixed_family_of_outdated_threads(self):
+        # Which old thread a re-raised finding duplicates is ambiguous when
+        # same-symbol siblings were renumbered; leave them all open.
+        threads = review.parse_threads([
+            _thread("a.py::c::x", outdated=True), _thread("a.py::c::x-2", outdated=True),
+            _thread("a.py::c::y", outdated=True), _thread("a.py::c::y-3"),
+        ])
+        threads += review.parse_threads([_thread("a.py::c::x"), _thread("a.py::c::x-2"), _thread("a.py::c::y")])
+        self.assertEqual([t.fp for t in review.superseded(threads)], ["a.py::c::y"])
+
 
 class AddressedTest(TestCase):
     def test_bot_addressed_reply_closes_thread(self):
@@ -199,6 +209,7 @@ class CloseAddressedTest(TestCase):
                 _thread("a.py::c::done", resolved=True),
             ]
         )
+        self.ids = {t.id for t in self.threads}
 
     def tearDown(self):
         review.gh = self._orig
@@ -208,7 +219,9 @@ class CloseAddressedTest(TestCase):
 
     def test_replies_then_resolves_including_backfill(self):
         self.resolve_fails = False
-        done = review.close_addressed(self.env, self.threads, [review.Resolution(fp="a.py::c::open", reason="Fixed.")])
+        done = review.close_addressed(
+            self.env, self.threads, [review.Resolution(fp="a.py::c::open", reason="Fixed.")], existing=self.ids
+        )
         self.assertEqual(done, 1)
         self.assertEqual(self._kinds(), ["reply", "graphql", "graphql"])
         resolved_ids = [a[-1] for a in self.calls if a[0] == "graphql"]
@@ -216,14 +229,17 @@ class CloseAddressedTest(TestCase):
 
     def test_stops_resolving_after_refusal(self):
         self.resolve_fails = True
-        done = review.close_addressed(self.env, self.threads, [review.Resolution(fp="a.py::c::open", reason="Fixed.")])
+        done = review.close_addressed(
+            self.env, self.threads, [review.Resolution(fp="a.py::c::open", reason="Fixed.")], existing=self.ids
+        )
         self.assertEqual(done, 1)
         self.assertEqual(self._kinds(), ["reply", "graphql"])
 
     def test_ignores_unknown_and_already_resolved(self):
         self.resolve_fails = False
         done = review.close_addressed(
-            self.env, self.threads, [review.Resolution(fp="a.py::c::done", reason="x"), review.Resolution(fp="nope", reason="x")]
+            self.env, self.threads, [review.Resolution(fp="a.py::c::done", reason="x"), review.Resolution(fp="nope", reason="x")],
+            existing=self.ids,
         )
         self.assertEqual(done, 0)
         self.assertEqual(self._kinds(), ["graphql"])  # backfill of the marked thread only
@@ -543,12 +559,15 @@ class PostTest(TestCase):
         self.fail_posts = set()  # paths whose comments GitHub rejects
         self.fail_bodies = set()  # comments GitHub rejects when the body contains one of these
         self.summary_body = None
+        self.replied = []  # comment ids replied to
 
         def fake_gh(*args, input_json=None, check=True):
             self.calls.append((args, input_json))
             path = args[0]
             if path == "graphql":
                 if "resolveReviewThread" in args[2]:
+                    thread_id = args[4].removeprefix("id=")
+                    next(n for n in self.live if n["id"] == thread_id)["isResolved"] = True
                     return {}
                 return {"data": {"repository": {"pullRequest": {"reviewThreads": {
                     "pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": list(self.live)}}}}}
@@ -557,6 +576,14 @@ class PostTest(TestCase):
                     return None
                 for c in input_json["comments"]:
                     self._land(c)
+                return {}
+            if path.endswith("/replies"):
+                comment_id = int(path.split("/")[-2])
+                self.replied.append(comment_id)
+                node = next(n for n in self.live if n["comments"]["nodes"][0]["databaseId"] == comment_id)
+                node["comments"]["nodes"].append(
+                    {"databaseId": 1000 + len(self.replied), "body": args[2].removeprefix("body="),
+                     "author": {"login": "github-actions"}})
                 return {}
             if path.endswith("/pulls/1/comments"):
                 if self._rejects(input_json):
@@ -591,8 +618,9 @@ class PostTest(TestCase):
             "comments": {"nodes": [{"databaseId": len(self.live), "body": comment["body"], "author": {"login": "github-actions"}}]},
         })
 
-    def _post(self, findings):
-        review.post(self.env, agent_ok=True, agent_output=json.dumps({"findings": findings, "resolutions": []}),
+    def _post(self, findings, resolutions=()):
+        review.post(self.env, agent_ok=True,
+                    agent_output=json.dumps({"findings": findings, "resolutions": list(resolutions)}),
                     mode="full", prior_sha=None)
 
     def _posted_paths(self):
@@ -645,6 +673,45 @@ class PostTest(TestCase):
         (self.ctx / "pr.diff").write_bytes(diff.encode("utf-8"))
         self._post([_finding(path="cr.py", line=3)])  # past the end: snaps to line 2
         self.assertEqual([n["line"] for n in self.live], [2])
+
+    def test_reraised_outdated_thread_is_superseded(self):
+        old = _thread("src/app.py::correctness::new", outdated=True)
+        old["comments"]["nodes"][0]["databaseId"] = 100
+        self.live.append(old)
+        self._post([_finding()])  # re-anchored on the current code
+        self.assertTrue(old["isResolved"])
+        self.assertIn(review.SUPERSEDED_MARKER, old["comments"]["nodes"][-1]["body"])
+        self.assertEqual(self.status["description"], "Open: 0 blocking, 1 should-fix, 0 nit")
+        self.replied = []
+        self._post([], resolutions=[{"fp": "src/app.py::correctness::new", "reason": "Fixed."}])
+        self.assertEqual(self.replied, [self.live[1]["comments"]["nodes"][0]["databaseId"]])
+
+    def test_reraise_of_a_suffixed_sibling_supersedes_neither(self):
+        olds = [_thread("src/app.py::correctness::new", outdated=True),
+                _thread("src/app.py::correctness::new-2", outdated=True)]
+        for i, node in enumerate(olds):
+            node["comments"]["nodes"][0]["databaseId"] = 100 + i
+        self.live.extend(olds)
+        # Only the second issue is re-raised; this run names it without a suffix.
+        self._post([_finding(body="The second issue again.")])
+        self.assertEqual([n["isResolved"] for n in self.live], [False, False, False])
+        self.assertEqual(self.replied, [])
+
+    def test_resolution_never_closes_a_thread_posted_in_the_same_run(self):
+        old = _thread("src/app.py::correctness::new", outdated=True)
+        old["comments"]["nodes"][0]["databaseId"] = 100
+        self.live.append(old)
+        # The agent judges the old issue fixed, and raises a different one on
+        # the same symbol, which is not suppressed since the old one is outdated.
+        self._post([_finding(body="A different bug.")],
+                   resolutions=[{"fp": "src/app.py::correctness::new", "reason": "Fixed."}])
+        new = self.live[1]
+        self.assertFalse(new["isResolved"])
+        self.assertEqual(len(new["comments"]["nodes"]), 1)
+        self.assertTrue(old["isResolved"])
+        self.assertEqual([c["body"] for c in old["comments"]["nodes"][1:]],
+                         [f"Addressed: Fixed.\n\n{review.ADDRESSED_MARKER}"])
+        self.assertEqual(self.status["description"], "Open: 0 blocking, 1 should-fix, 0 nit")
 
 
 if __name__ == "__main__":

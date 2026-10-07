@@ -28,7 +28,11 @@ in
   <!-- claude-review addressed -->
 and is then resolved. GitHub only lets a token with `contents: write` resolve
 review threads; without that grant the reply alone marks the thread, which
-from then on counts as closed just like a resolved one.
+from then on counts as closed just like a resolved one. An outdated thread
+whose finding is re-raised on the current code is closed the same way, with
+a reply ending in
+  <!-- claude-review superseded -->
+so the issue is counted, and later resolved, once.
 
 All inputs come from environment variables set by the workflow; see main().
 """
@@ -64,6 +68,7 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 # would corrupt the marker.
 FP_PART_RE = re.compile(r"[^A-Za-z0-9_./+\-]")
 ADDRESSED_MARKER = "<!-- claude-review addressed -->"
+SUPERSEDED_MARKER = "<!-- claude-review superseded -->"
 HUNK_RE = re.compile(r"^@@ -(?P<old>\d+)(?:,\d+)? \+(?P<new>\d+)(?:,\d+)? @@")
 SIDES = ("RIGHT", "LEFT")
 
@@ -197,7 +202,8 @@ def parse_threads(nodes: Iterable[dict[str, Any]]) -> list[Thread]:
         fp, sev = parsed
         github_resolved = bool(node.get("isResolved"))
         addressed = any(
-            ((c.get("author") or {}).get("login") in BOT_LOGINS) and ADDRESSED_MARKER in (c.get("body") or "")
+            ((c.get("author") or {}).get("login") in BOT_LOGINS)
+            and any(m in (c.get("body") or "") for m in (ADDRESSED_MARKER, SUPERSEDED_MARKER))
             for c in comments[1:]
         )
         threads.append(
@@ -231,6 +237,29 @@ def suppressed_fps(threads: Iterable[Thread]) -> set[str]:
     so the same finding may be re-anchored on the new code.
     """
     return {t.fp for t in threads if t.is_resolved or not t.is_outdated}
+
+
+def _suffixed(fp: str, base: str) -> bool:
+    return fp.startswith(f"{base}-") and fp[len(base) + 1:].isdigit()
+
+
+def superseded(threads: Iterable[Thread]) -> list[Thread]:
+    """Outdated open threads whose finding was re-raised on the current code.
+
+    Only a re-raise puts a live thread next to an outdated one with the same
+    fp (a live thread suppresses its fp), so the outdated one is a duplicate.
+    Not so when outdated same-symbol siblings (fp and fp-N) are open: a run
+    numbers its findings afresh, so the re-raise named fp may be fp-2's issue.
+    Those are left open; a duplicate is better than closing a live issue.
+    """
+    threads = list(threads)
+    live = {t.fp for t in threads if not t.is_resolved and not t.is_outdated}
+    outdated = [t for t in threads if not t.is_resolved and t.is_outdated]
+    return [
+        t
+        for t in outdated
+        if t.fp in live and not any(_suffixed(o.fp, t.fp) or _suffixed(t.fp, o.fp) for o in outdated)
+    ]
 
 
 def open_counts(threads: Iterable[Thread]) -> dict[str, int]:
@@ -722,20 +751,26 @@ def post_review(env: Env, findings: list[Finding]) -> list[Finding]:
 RESOLVE_MUTATION = "mutation($id:ID!){ resolveReviewThread(input:{threadId:$id}){ thread{ isResolved } } }"
 
 
-def close_addressed(env: Env, threads: list[Thread], resolutions: list[Resolution]) -> int:
+def close_addressed(env: Env, threads: list[Thread], resolutions: list[Resolution], *, existing: set[str]) -> int:
     """Reply with the reason and resolve each thread the agent judged addressed.
 
     The marked reply is what counts; resolving is best effort and needs
     `contents: write` from the caller. Threads marked on an earlier run but
     still open in GitHub are resolved too. After the first refusal the rest are
     only marked, rather than repeating a call that will fail.
+
+    A resolution reaches only threads in `existing`, the ids on the PR before
+    this run posted: the agent judged those, never a new finding that happens
+    to share the fp. Superseded threads are closed afterwards, skipping any a
+    resolution just closed.
     """
+    to_resolve = [t for t in threads if t.needs_resolve]
     by_fp: dict[str, list[Thread]] = {}
     for t in threads:
-        if not t.is_resolved and t.first_comment_id:
+        if not t.is_resolved and t.first_comment_id and t.id in existing:
             by_fp.setdefault(t.fp, []).append(t)
-    to_resolve = [t for t in threads if t.needs_resolve]
     done = 0
+    closed: set[str] = set()
     for r in resolutions:
         for t in by_fp.pop(r.fp, []):
             if gh(
@@ -744,7 +779,17 @@ def close_addressed(env: Env, threads: list[Thread], resolutions: list[Resolutio
                 check=False,
             ) is not None:
                 done += 1
+                closed.add(t.id)
                 to_resolve.append(t)
+    for t in superseded(threads):
+        if t.id in closed or not t.first_comment_id:
+            continue
+        if gh(
+            f"repos/{env.repo}/pulls/{env.pr}/comments/{t.first_comment_id}/replies",
+            "-f", f"body=Superseded by a new comment on the current code.\n\n{SUPERSEDED_MARKER}",
+            check=False,
+        ) is not None:
+            to_resolve.append(t)
     for t in to_resolve:
         if gh("graphql", "-f", f"query={RESOLVE_MUTATION}", "-f", f"id={t.id}", check=False) is None:
             print(
@@ -760,7 +805,8 @@ def post(env: Env, *, agent_ok: bool, agent_output: str, mode: str, prior_sha: s
     suppress = set(json.loads(state_path.read_text(encoding="utf-8"))["suppress"]) if state_path.exists() else set()
     # What is on the PR now: a re-run of this job after a partial post must not
     # post the findings that did land a second time.
-    live = suppressed_fps(fetch_threads(env.repo, env.pr))
+    before = fetch_threads(env.repo, env.pr)
+    live = suppressed_fps(before)
     # Decoded from bytes: read_text's universal newlines would split on "\r".
     pr_lines = diff_lines((env.context_dir / "pr.diff").read_bytes().decode("utf-8"))
     interdiff_path = env.context_dir / "interdiff.diff"
@@ -782,8 +828,8 @@ def post(env: Env, *, agent_ok: bool, agent_output: str, mode: str, prior_sha: s
     unposted = post_review(env, findings)
     posted = len(findings) - len(unposted)
     threads = fetch_threads(env.repo, env.pr)
-    resolved = close_addressed(env, threads, resolutions)
-    if resolved:
+    resolved = close_addressed(env, threads, resolutions, existing={t.id for t in before})
+    if resolved or superseded(threads):
         threads = fetch_threads(env.repo, env.pr)
     counts = open_counts(threads)
 
