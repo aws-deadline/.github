@@ -69,11 +69,36 @@ SIDES = ("RIGHT", "LEFT")
 
 # Per side, each file's commentable line numbers.
 DiffLines = dict[str, dict[str, set[int]]]
+C_ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13}
 
 
 # ---------------------------------------------------------------------------
 # Pure helpers (unit tested)
 # ---------------------------------------------------------------------------
+
+
+def diff_path(name: str, prefix: str) -> str | None:
+    """The path in a ---/+++ header, or None for /dev/null.
+
+    git ends a name containing a space with a tab, and C-quotes a name with
+    special characters (and non-ASCII ones unless core.quotepath=false).
+    """
+    name = name.removesuffix("\t")
+    if name.startswith('"') and name.endswith('"') and len(name) > 1:
+        body, raw, i = name[1:-1], bytearray(), 0
+        while i < len(body):
+            if body[i] == "\\" and i + 1 < len(body):
+                if body[i + 1] in "01234567":
+                    raw.append(int(body[i + 1 : i + 4], 8) & 0xFF)
+                    i += 4
+                else:
+                    raw += bytes([C_ESCAPES.get(body[i + 1], ord(body[i + 1]))])
+                    i += 2
+            else:
+                raw += body[i].encode("utf-8")
+                i += 1
+        name = raw.decode("utf-8", errors="replace")
+    return name[len(prefix):] if name.startswith(prefix) else None
 
 
 def diff_lines(diff_text: str) -> DiffLines:
@@ -90,16 +115,16 @@ def diff_lines(diff_text: str) -> DiffLines:
     old_path: str | None = None
     path: str | None = None
     old_line = new_line = 0
-    for raw in diff_text.splitlines():
+    # Only "\n" ends a diff line; splitlines() would also split content on
+    # form feeds and other separators.
+    for raw in diff_text.split("\n"):
         if raw.startswith("diff --git "):
             old_path = path = None
             old_line = new_line = 0
         elif raw.startswith("--- ") and path is None:
-            source = raw[4:]
-            old_path = source[2:] if source.startswith("a/") else None
+            old_path = diff_path(raw[4:], "a/")
         elif raw.startswith("+++ ") and path is None:
-            target = raw[4:]
-            path = target[2:] if target.startswith("b/") else old_path
+            path = diff_path(raw[4:], "b/") or old_path
             if path is not None:
                 for side in SIDES:
                     lines[side].setdefault(path, set())
@@ -476,10 +501,12 @@ def gh(*args: str, input_json: Any = None, check: bool = True) -> Any:
 
 
 def git(repo: str, *args: str, check: bool = True) -> str:
-    proc = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    # Bytes, not text=True: universal newlines would turn a lone "\r" in file
+    # content into a line break and shift every anchor after it.
+    proc = subprocess.run(["git", "-C", repo, *args], capture_output=True)
     if check and proc.returncode != 0:
-        raise RuntimeError(f"git {' '.join(args)} failed: {proc.stderr.strip()}")
-    return proc.stdout if proc.returncode == 0 else ""
+        raise RuntimeError(f"git {' '.join(args)} failed: {proc.stderr.decode('utf-8', 'replace').strip()}")
+    return proc.stdout.decode("utf-8", "replace") if proc.returncode == 0 else ""
 
 
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git hash-object -t tree /dev/null
@@ -492,8 +519,9 @@ def git_diff(repo: str, *args: str, check: bool = True) -> str:
     # Reading attributes from the empty tree (git >= 2.40) ignores the PR's
     # .gitattributes while keeping git's own binary detection, which --text
     # would also disable, flooding pr.diff with binary content.
+    # quotepath=false keeps non-ASCII names readable rather than octal-quoted.
     return git(
-        repo, "--literal-pathspecs", f"--attr-source={EMPTY_TREE}",
+        repo, "-c", "core.quotepath=false", "--literal-pathspecs", f"--attr-source={EMPTY_TREE}",
         "diff", "--no-ext-diff", "--no-textconv", *args, check=check,
     )
 
@@ -733,9 +761,10 @@ def post(env: Env, *, agent_ok: bool, agent_output: str, mode: str, prior_sha: s
     # What is on the PR now: a re-run of this job after a partial post must not
     # post the findings that did land a second time.
     live = suppressed_fps(fetch_threads(env.repo, env.pr))
-    pr_lines = diff_lines((env.context_dir / "pr.diff").read_text(encoding="utf-8"))
+    # Decoded from bytes: read_text's universal newlines would split on "\r".
+    pr_lines = diff_lines((env.context_dir / "pr.diff").read_bytes().decode("utf-8"))
     interdiff_path = env.context_dir / "interdiff.diff"
-    interdiff_lines = diff_lines(interdiff_path.read_text(encoding="utf-8") if interdiff_path.exists() else "")
+    interdiff_lines = diff_lines(interdiff_path.read_bytes().decode("utf-8") if interdiff_path.exists() else "")
 
     parsed = parse_agent_output(agent_output) if agent_ok else None
     if parsed is None:

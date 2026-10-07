@@ -85,6 +85,24 @@ class DiffLinesTest(TestCase):
     def test_empty(self):
         self.assertEqual(review.diff_lines(""), {"RIGHT": {}, "LEFT": {}})
 
+    def test_unusual_paths(self):
+        # git ends a name containing a space with a tab, and C-quotes names
+        # with special or (unless core.quotepath=false) non-ASCII characters.
+        diff = (
+            "diff --git a/sp ace.py b/sp ace.py\n--- a/sp ace.py\t\n+++ b/sp ace.py\t\n@@ -1 +1 @@\n-x\n+y\n"
+            'diff --git "a/caf\\303\\251.py" "b/caf\\303\\251.py"\n--- "a/caf\\303\\251.py"\n'
+            '+++ "b/caf\\303\\251.py"\n@@ -1 +1 @@\n-x\n+y\n'
+            'diff --git "a/t\\ta\\"b.py" "b/t\\ta\\"b.py"\nnew file mode 100644\n--- /dev/null\n'
+            '+++ "b/t\\ta\\"b.py"\n@@ -0,0 +1 @@\n+y\n'
+        )
+        lines = review.diff_lines(diff)
+        self.assertEqual(lines["RIGHT"], {"sp ace.py": {1}, "café.py": {1}, 't\ta"b.py': {1}})
+        self.assertEqual(lines["LEFT"], {"sp ace.py": {1}, "café.py": {1}})
+
+    def test_only_newline_ends_a_line(self):
+        diff = "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1,2 +1,2 @@\n-a\n+a\x0c+b\n z\n"
+        self.assertEqual(review.diff_lines(diff)["RIGHT"], {"f": {1, 2}})
+
 
 class FingerprintTest(TestCase):
     def test_sanitizes_marker_breaking_characters(self):
@@ -492,6 +510,16 @@ class PrepareTest(TestCase):
         pr_diff = (Path(self.tmp.name) / "ctx" / "pr.diff").read_text(encoding="utf-8")
         self.assertIn("Binary files /dev/null and b/logo.png differ", pr_diff)
 
+    def test_lone_carriage_return_does_not_split_a_line(self):
+        head = _commit(self.repo, {"cr.py": "1\n2\r 3\n4\n"})
+        diff = review.git_diff(str(self.repo), f"{self.base}..{head}")
+        self.assertIn("+2\r 3\n", diff)
+        self.assertEqual(review.diff_lines(diff)["RIGHT"]["cr.py"], {1, 2, 3})
+
+    def test_unusual_paths_reach_the_interdiff(self):
+        diffs = self._prepare({"sp ace.py": "x\n", "café.py": "x\n"})
+        self.assertEqual((diffs["interdiff.diff"]["sp ace.py"], diffs["interdiff.diff"]["café.py"]), ({1}, {1}))
+
     def test_file_name_is_not_a_pathspec(self):
         diffs = self._prepare({"a.py": "1\n2\n3\n", ":(exclude)*": "x\n"})
         self.assertEqual(diffs["interdiff.diff"]["a.py"], {1, 2, 3})
@@ -611,6 +639,12 @@ class PostTest(TestCase):
         fps = [review.parse_fp_marker(n["comments"]["nodes"][0]["body"])[0] for n in self.live]
         self.assertEqual(fps, ["src/app.py::correctness::new", "src/app.py::correctness::new-2"])
         self.assertIn(f"reviewed={SHA_A}", self.summary_body)
+
+    def test_pr_diff_is_read_back_without_splitting_on_carriage_returns(self):
+        diff = "diff --git a/cr.py b/cr.py\nnew file mode 100644\n--- /dev/null\n+++ b/cr.py\n@@ -0,0 +1,2 @@\n+a\r b\n+c\n"
+        (self.ctx / "pr.diff").write_bytes(diff.encode("utf-8"))
+        self._post([_finding(path="cr.py", line=3)])  # past the end: snaps to line 2
+        self.assertEqual([n["line"] for n in self.live], [2])
 
 
 if __name__ == "__main__":
