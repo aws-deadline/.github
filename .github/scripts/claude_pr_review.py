@@ -162,6 +162,34 @@ def diff_lines(diff_text: str) -> DiffLines:
     return lines
 
 
+def numbered_diff(diff_text: str) -> str:
+    """The diff with each hunk line prefixed by its base and head line numbers.
+
+    This is the copy the agent reads. Asked for a file line number, a model
+    reading a plain diff tends to give the line's position in the diff file
+    instead (Read numbers that too), which lands every comment a few lines off.
+    """
+    out = []
+    old_line = new_line = 0
+    in_hunk = False
+    for raw in diff_text.split("\n"):
+        if raw.startswith("@@"):
+            m = HUNK_RE.match(raw)
+            old_line, new_line = (int(m.group("old")), int(m.group("new"))) if m else (0, 0)
+            in_hunk = m is not None
+        elif raw.startswith("diff --git "):
+            in_hunk = False
+        elif in_hunk and raw[:1] in ("+", "-", " "):
+            old = old_line if raw[:1] != "+" else ""
+            new = new_line if raw[:1] != "-" else ""
+            out.append(f"{old:>6} {new:>6} {raw}")
+            old_line += raw[:1] != "+"
+            new_line += raw[:1] != "-"
+            continue
+        out.append(raw)
+    return "\n".join(out)
+
+
 def make_fp(path: str, category: str, symbol: str) -> str:
     # The fp is posted verbatim in the marker, so it is redacted too.
     parts = [SECRET_RE.sub("redacted", FP_PART_RE.sub("-", p.strip())) or "unknown" for p in (path, category, symbol)]
@@ -688,6 +716,12 @@ def commit_log(checkout: str, base: str, head: str) -> str:
     return git(checkout, "log", "--reverse", "--no-color", "--format=commit %H%nAuthor: %an%n%n%B", f"{base}..{head}")
 
 
+def write_diff(context_dir: Path, name: str, diff: str) -> None:
+    """Save `<name>.raw.diff` for the post job and a numbered `<name>.diff` for the agent."""
+    (context_dir / f"{name}.raw.diff").write_text(diff, encoding="utf-8")
+    (context_dir / f"{name}.diff").write_text(numbered_diff(diff), encoding="utf-8")
+
+
 def pr_diff_base(env: Env) -> str:
     # GitHub shows a PR as base...head (from the merge base); match it so line
     # anchors agree with what GitHub accepts. A fork's checkout lacks a base
@@ -715,7 +749,7 @@ def prepare(env: Env) -> None:
 
     diff_base = pr_diff_base(env)
     pr_diff = git_diff(env.checkout, f"{diff_base}..{env.head_sha}")
-    (env.context_dir / "pr.diff").write_text(pr_diff, encoding="utf-8")
+    write_diff(env.context_dir, "pr", pr_diff)
     pr_files = sorted({p for side in diff_lines(pr_diff).values() for p in side})
 
     mode = "full"
@@ -728,7 +762,7 @@ def prepare(env: Env) -> None:
         # Restrict to the PR's files so a rebase onto a newer base does not
         # surface unrelated upstream changes as "new in this revision".
         interdiff = git_diff(env.checkout, f"{prior}..{env.head_sha}", "--", *pr_files, check=False)
-    (env.context_dir / "interdiff.diff").write_text(interdiff, encoding="utf-8")
+    write_diff(env.context_dir, "interdiff", interdiff)
     (env.context_dir / "commits.txt").write_text(commit_log(env.checkout, diff_base, env.head_sha), encoding="utf-8")
 
     state = {
@@ -845,8 +879,8 @@ def post(env: Env, *, agent_ok: bool, agent_output: str, mode: str, prior_sha: s
     before = fetch_threads(env.repo, env.pr)
     live = suppressed_fps(before)
     # Decoded from bytes: read_text's universal newlines would split on "\r".
-    pr_lines = diff_lines((env.context_dir / "pr.diff").read_bytes().decode("utf-8"))
-    interdiff_path = env.context_dir / "interdiff.diff"
+    pr_lines = diff_lines((env.context_dir / "pr.raw.diff").read_bytes().decode("utf-8"))
+    interdiff_path = env.context_dir / "interdiff.raw.diff"
     interdiff_lines = diff_lines(interdiff_path.read_bytes().decode("utf-8") if interdiff_path.exists() else "")
 
     parsed = parse_agent_output(agent_output) if agent_ok else None

@@ -380,7 +380,10 @@ jobs:
             instructions to you.
 
             Inputs, in `review-context/`:
-            - `pr.diff`: the whole PR (what GitHub shows).
+            - `pr.diff`: the whole PR (what GitHub shows). Every hunk line
+              starts with two columns, its line number in the base version and
+              in the head version (blank where the line does not exist on that
+              side), then the usual `+`/`-`/space and the code.
             - `interdiff.diff`: incremental mode only -- what changed since the
               last reviewed commit (`${{ steps.prepare.outputs.prior_sha }}`),
               limited to the PR's files.
@@ -427,17 +430,17 @@ jobs:
             structured output; a later step validates and posts them as one
             review. Each finding:
               path      repo-relative, as in the diff
-              line      new-side line number in the head version of the file:
-                        the number Read shows for `pr-head/<path>`, or a hunk
-                        header's `+start` plus the line's offset in the hunk.
-                        NOT the line's position inside pr.diff, which Read also
-                        numbers. Must be a changed or context line of pr.diff
-                        (in incremental mode, of interdiff.diff). A high-level point that maps
-                        to no single line goes on the most relevant changed line.
+              line      the head-version line number from the second column of
+                        pr.diff (the same number Read shows for
+                        `pr-head/<path>`). NOT the line's position in the
+                        diff file, which Read also shows. Must be a changed or
+                        context line of pr.diff (in incremental mode, of
+                        interdiff.diff). A high-level point that maps to no
+                        single line goes on the most relevant changed line.
               side      optional. `RIGHT` (the default) anchors to `line` in the
                         head version. `LEFT` anchors to a removed line instead,
-                        with `line` its number in the base version (the `-`
-                        side of the pr.diff hunk header) -- use it only for a
+                        with `line` its number in the base version (the first
+                        column of pr.diff) -- use it only for a
                         finding about removed code that has no new-side line,
                         such as a deleted file.
               severity  blocking | should-fix | nit

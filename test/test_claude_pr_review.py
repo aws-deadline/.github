@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -102,6 +103,32 @@ class DiffLinesTest(TestCase):
     def test_only_newline_ends_a_line(self):
         diff = "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1,2 +1,2 @@\n-a\n+a\x0c+b\n z\n"
         self.assertEqual(review.diff_lines(diff)["RIGHT"], {"f": {1, 2}})
+
+
+class NumberedDiffTest(TestCase):
+    def test_every_hunk_line_carries_its_anchor_numbers(self):
+        numbered = review.numbered_diff(DIFF).split("\n")
+        self.assertIn("    10     10      keep = 1", numbered)
+        self.assertIn("    11        -    old = 2", numbered)
+        self.assertIn("           11 +    new = 2", numbered)
+        self.assertIn("     1        -x = 1", numbered)
+        self.assertIn("            2 +b = 2", numbered)
+        self.assertIn("@@ -10,4 +10,5 @@ def main():", numbered)
+        self.assertIn("\\ No newline at end of file", numbered)
+
+    def test_numbers_agree_with_diff_lines(self):
+        anchors = {side: {} for side in review.SIDES}
+        path = None
+        for row in review.numbered_diff(DIFF).split("\n"):
+            if row.startswith("+++ "):
+                path = row[6:] if row != "+++ /dev/null" else "gone.py"
+            elif re.match(r"^[ \d]{6} [ \d]{6} [-+ ]", row) and row[:13].strip():
+                old, new = row[:6].strip(), row[7:13].strip()
+                if new:
+                    anchors["RIGHT"].setdefault(path, set()).add(int(new))
+                if old:
+                    anchors["LEFT"].setdefault(path, set()).add(int(old))
+        self.assertEqual(anchors, review.diff_lines(DIFF))
 
 
 class FingerprintTest(TestCase):
@@ -560,21 +587,28 @@ class PrepareTest(TestCase):
         with mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(self.out)}):
             review.prepare(env)
         return {name: review.diff_lines((env.context_dir / name).read_text(encoding="utf-8"))["RIGHT"]
-                for name in ("pr.diff", "interdiff.diff")}
+                for name in ("pr.raw.diff", "interdiff.raw.diff")}
+
+    def test_agent_gets_numbered_diffs(self):
+        self._prepare({"a.py": "1\n2\n3\n"})
+        ctx = Path(self.tmp.name) / "ctx"
+        for name in ("pr", "interdiff"):
+            raw = (ctx / f"{name}.raw.diff").read_text(encoding="utf-8")
+            self.assertEqual((ctx / f"{name}.diff").read_text(encoding="utf-8"), review.numbered_diff(raw))
 
     def test_pr_gitattributes_cannot_hide_the_diff(self):
         diffs = self._prepare({"a.py": "1\n2\n3\n", ".gitattributes": "* -diff\n"})
-        self.assertEqual(diffs["pr.diff"]["a.py"], {1, 2, 3})
-        self.assertEqual(diffs["interdiff.diff"]["a.py"], {1, 2, 3})
+        self.assertEqual(diffs["pr.raw.diff"]["a.py"], {1, 2, 3})
+        self.assertEqual(diffs["interdiff.raw.diff"]["a.py"], {1, 2, 3})
 
     def test_binary_file_is_not_fatal(self):
         # git's own binary detection still applies; only the PR's
         # .gitattributes are ignored, so `* -diff` cannot hide a text file.
         (self.repo / "logo.png").write_bytes(b"\x89PNG\xff\xfe\x00\n" * 50)
         diffs = self._prepare({"a.py": "1\n2\n3\n", ".gitattributes": "* -diff\n"})
-        self.assertEqual(diffs["pr.diff"]["a.py"], {1, 2, 3})
-        self.assertNotIn("logo.png", diffs["pr.diff"])
-        pr_diff = (Path(self.tmp.name) / "ctx" / "pr.diff").read_text(encoding="utf-8")
+        self.assertEqual(diffs["pr.raw.diff"]["a.py"], {1, 2, 3})
+        self.assertNotIn("logo.png", diffs["pr.raw.diff"])
+        pr_diff = (Path(self.tmp.name) / "ctx" / "pr.raw.diff").read_text(encoding="utf-8")
         self.assertIn("Binary files /dev/null and b/logo.png differ", pr_diff)
 
     def test_lone_carriage_return_does_not_split_a_line(self):
@@ -585,11 +619,11 @@ class PrepareTest(TestCase):
 
     def test_unusual_paths_reach_the_interdiff(self):
         diffs = self._prepare({"sp ace.py": "x\n", "café.py": "x\n"})
-        self.assertEqual((diffs["interdiff.diff"]["sp ace.py"], diffs["interdiff.diff"]["café.py"]), ({1}, {1}))
+        self.assertEqual((diffs["interdiff.raw.diff"]["sp ace.py"], diffs["interdiff.raw.diff"]["café.py"]), ({1}, {1}))
 
     def test_file_name_is_not_a_pathspec(self):
         diffs = self._prepare({"a.py": "1\n2\n3\n", ":(exclude)*": "x\n"})
-        self.assertEqual(diffs["interdiff.diff"]["a.py"], {1, 2, 3})
+        self.assertEqual(diffs["interdiff.raw.diff"]["a.py"], {1, 2, 3})
 
 
 class CommitLogTest(TestCase):
@@ -621,7 +655,7 @@ class PostTest(TestCase):
 
         self.tmp = tempfile.TemporaryDirectory()
         self.ctx = Path(self.tmp.name)
-        (self.ctx / "pr.diff").write_text(DIFF, encoding="utf-8")
+        (self.ctx / "pr.raw.diff").write_text(DIFF, encoding="utf-8")
         (self.ctx / "prior-review-state.json").write_text(json.dumps({"suppress": []}), encoding="utf-8")
         self.env = review.Env(
             repo="o/r", pr=1, head_sha=SHA_A, base_sha=SHA_B, checkout="pr-head", context_dir=self.ctx, run_url="u",
@@ -746,7 +780,7 @@ class PostTest(TestCase):
 
     def test_pr_diff_is_read_back_without_splitting_on_carriage_returns(self):
         diff = "diff --git a/cr.py b/cr.py\nnew file mode 100644\n--- /dev/null\n+++ b/cr.py\n@@ -0,0 +1,2 @@\n+a\r b\n+c\n"
-        (self.ctx / "pr.diff").write_bytes(diff.encode("utf-8"))
+        (self.ctx / "pr.raw.diff").write_bytes(diff.encode("utf-8"))
         self._post([_finding(path="cr.py", line=3)])  # past the end: snaps to line 2
         self.assertEqual([n["line"] for n in self.live], [2])
 
