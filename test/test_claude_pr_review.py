@@ -103,6 +103,35 @@ class FingerprintTest(TestCase):
         self.assertEqual(review.parse_fp_marker(rendered), ("p.py::c::real", "blocking"))
         self.assertNotIn(review.ADDRESSED_MARKER, rendered)
 
+    def test_credentials_are_redacted_from_posted_text(self):
+        secrets = [
+            "bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29tLz9BY3Rpb249Q2FsbFdpdGhCZWFyZXJUb2tlbg==",
+            "ghs_" + "a1B2" * 9,
+            "github_pat_" + "A1b2" * 20,
+            "AKIA" + "ABCDEFGHIJ234567",
+            "ASIA" + "ABCDEFGHIJ234567",
+            "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJyZXBvOmEvYiJ9.c2lnbmF0dXJl",
+        ]
+        for secret in secrets:
+            with self.subTest(secret=secret[:12]):
+                f = review.Finding(path="p.py", line=1, severity="nit", fp="p.py::c::x", body=f"Leak: {secret} end.")
+                rendered = review.render_comment(f)
+                self.assertNotIn(secret, rendered)
+                self.assertIn("Leak: [redacted] end.", rendered)
+        self.assertEqual(review.defang("task-1234 and AKIA-docs"), "task-1234 and AKIA-docs")
+
+    def test_credentials_are_redacted_from_the_fingerprint(self):
+        token = "ghs_" + "a1B2" * 9
+        fp = review.make_fp("p.py", "security", token)
+        self.assertNotIn(token, fp)
+        self.assertEqual(fp, "p.py::security::redacted")
+
+    def test_redaction_runs_before_truncation(self):
+        token = "ghs_" + "a1B2" * 9
+        body = "x" * (review.MAX_BODY_CHARS - 35) + token
+        f = review.Finding(path="p.py", line=1, severity="nit", fp="p.py::c::x", body=body)
+        self.assertNotIn(token[:35], review.render_comment(f))
+
     def test_legacy_marker_defaults_to_should_fix(self):
         self.assertEqual(
             review.parse_fp_marker("x\n<!-- claude-review fp=a::b::c -->"), ("a::b::c", "should-fix")
@@ -356,6 +385,27 @@ class StatusAndSummaryTest(TestCase):
         self.assertIn("reviewed=none", body)
         self.assertIn("did not finish", body)
         self.assertNotIn("✅", body)
+
+
+class CommitLogTest(TestCase):
+    def test_lists_the_pr_commits_oldest_first(self):
+        import subprocess
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as repo:
+            def run(*args):
+                return subprocess.run(["git", "-C", repo, *args], check=True, capture_output=True, text=True).stdout.strip()
+
+            run("init", "-q")
+            run("config", "commit.gpgsign", "false")
+            run("-c", "user.name=t", "-c", "user.email=t@e", "commit", "-q", "--allow-empty", "-m", "base")
+            base = run("rev-parse", "HEAD")
+            for msg in ("feat: one\n\nWhy one.", "fix: two"):
+                run("-c", "user.name=t", "-c", "user.email=t@e", "commit", "-q", "--allow-empty", "-m", msg)
+            log = review.commit_log(repo, base, run("rev-parse", "HEAD"))
+        self.assertNotIn("base", log)
+        self.assertLess(log.index("feat: one"), log.index("fix: two"))
+        self.assertIn("Why one.", log)
 
 
 class PostTest(TestCase):
