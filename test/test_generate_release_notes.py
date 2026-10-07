@@ -122,5 +122,36 @@ class GetPrDescriptionsTest(TestCase):
         self.assertIn("set the GH_TOKEN environment variable", stderr)
 
 
+class RepoNameFromRemoteTest(TestCase):
+    def setUp(self):
+        self._orig = (sys.argv, notes.run_git, notes.get_latest_tag, notes.get_commits_since_tag)
+        notes.get_latest_tag = lambda: "1.0.0"
+        notes.get_commits_since_tag = lambda tag: []
+
+    def tearDown(self):
+        sys.argv, notes.run_git, notes.get_latest_tag, notes.get_commits_since_tag = self._orig
+
+    def _repo_name(self, remote):
+        sys.argv = ["generate_release_notes.py"]
+        notes.run_git = lambda *args: remote
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            notes.main()
+        return stderr.getvalue().split("Generating release notes for ", 1)[1].split(" since ", 1)[0]
+
+    def test_git_suffix_is_removed(self):
+        self.assertEqual(self._repo_name("https://github.com/aws-deadline/deadline-cloud.git"), "deadline-cloud")
+
+    def test_names_ending_in_suffix_letters_are_kept(self):
+        # rstrip(".git") strips any trailing ".", "g", "i", "t" characters, not the suffix.
+        for remote, name in [
+            ("https://github.com/OpenJobDescription/openjd-cli.git", "openjd-cli"),
+            ("git@github.com:aws-deadline/deadline-cloud-for-unreal-engine-plugin-git", "deadline-cloud-for-unreal-engine-plugin-git"),
+            ("https://github.com/aws-deadline/.github", ".github"),
+        ]:
+            with self.subTest(remote=remote):
+                self.assertEqual(self._repo_name(remote), name)
+
+
 if __name__ == "__main__":
     unittest_main()

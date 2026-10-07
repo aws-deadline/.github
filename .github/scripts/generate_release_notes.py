@@ -274,7 +274,7 @@ def main():
         repo_name = args.repo
     else:
         remote = run_git("remote", "get-url", "origin")
-        repo_name = remote.rstrip(".git").rsplit("/", 1)[-1]
+        repo_name = remote.removesuffix(".git").rsplit("/", 1)[-1]
 
     tag = args.since or get_latest_tag()
     print(f"Generating release notes for {repo_name} since {tag}...", file=sys.stderr)
