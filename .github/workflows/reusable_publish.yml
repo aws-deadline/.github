@@ -93,11 +93,14 @@ jobs:
 
           echo "TAG=$TAG" >> $GITHUB_ENV
           echo "NEXT_SEMVER=$NEXT_SEMVER" >> $GITHUB_ENV
+          # The changelog section is model-generated, so use a random delimiter: a fixed one could be
+          # ended early by a matching line in the notes, letting them set other env vars for later steps.
+          delim="ghadelimiter_$(openssl rand -hex 16)"
           {
-            echo 'RELEASE_NOTES<<EOF'
+            echo "RELEASE_NOTES<<$delim"
             python .github/scripts/get_latest_changelog.py
-            echo EOF
-          } >> $GITHUB_ENV
+            echo "$delim"
+          } >> "$GITHUB_ENV"
 
       # Tag must be made before building so the generated _version.py files have the correct version
       - name: Build

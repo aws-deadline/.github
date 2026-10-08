@@ -143,6 +143,10 @@ def get_pr_descriptions(commits: list[dict]) -> dict[str, str]:
         )
         if result.returncode == 0 and result.stdout.strip():
             descriptions[pr] = result.stdout.strip()[:2000]
+        elif result.returncode != 0:
+            # Notes are still generated from commits alone, but say why the
+            # PR context is missing (e.g. no GH_TOKEN in Actions).
+            print(f"Warning: could not fetch PR #{pr}: {result.stderr.strip()}", file=sys.stderr)
     return descriptions
 
 
@@ -270,7 +274,7 @@ def main():
         repo_name = args.repo
     else:
         remote = run_git("remote", "get-url", "origin")
-        repo_name = remote.rstrip(".git").rsplit("/", 1)[-1]
+        repo_name = remote.removesuffix(".git").rsplit("/", 1)[-1]
 
     tag = args.since or get_latest_tag()
     print(f"Generating release notes for {repo_name} since {tag}...", file=sys.stderr)

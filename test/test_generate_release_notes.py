@@ -5,8 +5,10 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import subprocess
 import sys
 import types
+from contextlib import redirect_stderr
 from pathlib import Path
 from unittest import TestCase, main as unittest_main
 
@@ -92,6 +94,63 @@ class InvokeBedrockTest(TestCase):
         with self.assertRaises(RuntimeError):
             self._run({"content": [], "stop_reason": "refusal"})
         self.assertEqual(len(self.client.requests), 1)
+
+
+class GetPrDescriptionsTest(TestCase):
+    def setUp(self):
+        self._orig_run = notes.subprocess.run
+
+    def tearDown(self):
+        notes.subprocess.run = self._orig_run
+
+    def _run(self, result):
+        notes.subprocess.run = lambda args, **kw: subprocess.CompletedProcess(args, *result)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            descriptions = notes.get_pr_descriptions([{"subject": "feat: a thing (#12)"}])
+        return descriptions, stderr.getvalue()
+
+    def test_fetched_description_is_returned(self):
+        descriptions, stderr = self._run((0, "Title\nBody", ""))
+        self.assertEqual(descriptions, {"12": "Title\nBody"})
+        self.assertEqual(stderr, "")
+
+    def test_gh_failure_is_warned_not_silent(self):
+        descriptions, stderr = self._run((4, "", "gh: To use GitHub CLI in a GitHub Actions workflow, set the GH_TOKEN environment variable.\n"))
+        self.assertEqual(descriptions, {})
+        self.assertIn("#12", stderr)
+        self.assertIn("set the GH_TOKEN environment variable", stderr)
+
+
+class RepoNameFromRemoteTest(TestCase):
+    def setUp(self):
+        self._orig = (sys.argv, notes.run_git, notes.get_latest_tag, notes.get_commits_since_tag)
+        notes.get_latest_tag = lambda: "1.0.0"
+        notes.get_commits_since_tag = lambda tag: []
+
+    def tearDown(self):
+        sys.argv, notes.run_git, notes.get_latest_tag, notes.get_commits_since_tag = self._orig
+
+    def _repo_name(self, remote):
+        sys.argv = ["generate_release_notes.py"]
+        notes.run_git = lambda *args: remote
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            notes.main()
+        return stderr.getvalue().split("Generating release notes for ", 1)[1].split(" since ", 1)[0]
+
+    def test_git_suffix_is_removed(self):
+        self.assertEqual(self._repo_name("https://github.com/aws-deadline/deadline-cloud.git"), "deadline-cloud")
+
+    def test_names_ending_in_suffix_letters_are_kept(self):
+        # rstrip(".git") strips any trailing ".", "g", "i", "t" characters, not the suffix.
+        for remote, name in [
+            ("https://github.com/OpenJobDescription/openjd-cli.git", "openjd-cli"),
+            ("git@github.com:aws-deadline/deadline-cloud-for-unreal-engine-plugin-git", "deadline-cloud-for-unreal-engine-plugin-git"),
+            ("https://github.com/aws-deadline/.github", ".github"),
+        ]:
+            with self.subTest(remote=remote):
+                self.assertEqual(self._repo_name(remote), name)
 
 
 if __name__ == "__main__":

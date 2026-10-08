@@ -79,6 +79,8 @@ jobs:
       - name: GenerateChangeLog
         env:
           REPO_NAME: ${{ github.event.repository.name }}
+          # The script reads PR descriptions with `gh pr view`, which needs a token in Actions.
+          GH_TOKEN: ${{ github.token }}
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0)
           NOTES=$(python .dot-github/.github/scripts/generate_release_notes.py "$NEXT_SEMVER" --since "$PREV_TAG" --repo "$REPO_NAME")
@@ -90,12 +92,15 @@ jobs:
 
           git add CHANGELOG.md
 
-          # Save for PR body
+          # Save for PR body. The notes are model output steered by commit and PR text, so use a
+          # random delimiter: a fixed one could be ended early by a matching line in the notes,
+          # letting them set other env vars for the later steps that hold CI_TOKEN.
+          delim="ghadelimiter_$(openssl rand -hex 16)"
           {
-            echo 'RELEASE_NOTES<<EOF'
+            echo "RELEASE_NOTES<<$delim"
             echo "$NOTES"
-            echo 'EOF'
-          } >> $GITHUB_ENV
+            echo "$delim"
+          } >> "$GITHUB_ENV"
 
       # A precommit hook into the GitHub Action workflow.
       # If the action .github/actions/bump_precommit_hook exists in the repository
