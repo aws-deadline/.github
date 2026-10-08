@@ -28,9 +28,10 @@
 #     only on the full review.
 #   - A sticky summary comment and a "Claude review" commit status report
 #     what is still open, so authors know when the review has settled. The
-#     status is set when a review finishes, so a head commit with no status
-#     has not been reviewed yet. It needs `statuses: write` from the caller
-#     (see below); without it the summary comment alone carries the signal.
+#     status is "pending" while a review runs and is set to the result when
+#     it finishes, so a head commit with no status has not been picked up for
+#     review. It needs `statuses: write` from the caller (see below); without
+#     it the summary comment alone carries the signal.
 name: Claude PR Review
 
 on:
@@ -84,8 +85,11 @@ on:
         description: "ARN of the OIDC role that can mint a Bedrock bearer token. Kept in a secret so the account id is configured in one place."
         required: true
 
-# Permissions are split across two jobs so the job that runs the model never
+# Permissions are split across jobs so the job that runs the model never
 # holds a token that can write anything:
+#   resolve finds the PR for the head SHA. It declares a read-only token.
+#   start   sets the pending commit status. Like post, it declares no
+#           permissions and runs no model.
 #   review  runs the agent on the untrusted PR. It declares a read-only token
 #           (plus id-token: write for Bedrock) and hands its results to the
 #           post job as an artifact.
@@ -101,6 +105,7 @@ on:
 #   issues: write         post/update the summary comment
 #   id-token: write       mint the OIDC token for Bedrock
 #   statuses: write       optional: set the "Claude review" commit status
+#                         (start and post jobs)
 #   contents: write       optional, instead of contents: read: resolve review
 #                         threads the review judges addressed (GitHub requires
 #                         it for resolveReviewThread). Only the post job, which
@@ -108,22 +113,20 @@ on:
 # No admin scopes.
 
 jobs:
-  review:
+  # Resolve the PR, then set the pending status before the review starts.
+  # These are separate jobs so the status is written by a job that runs no
+  # model; the review job's token stays read-only.
+  resolve:
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.timeout_minutes }}
-    # Read-only: everything this job writes goes through the post job.
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
-      issues: read
-      id-token: write
     outputs:
-      prepared: ${{ steps.prepare.outcome == 'success' }}
+      resolved: ${{ steps.meta.outputs.resolved }}
       pr_number: ${{ steps.meta.outputs.pr_number }}
       head_sha: ${{ steps.meta.outputs.head_sha }}
       base_sha: ${{ steps.meta.outputs.base_sha }}
-      mode: ${{ steps.prepare.outputs.mode }}
-      prior_sha: ${{ steps.prepare.outputs.prior_sha }}
     steps:
       # Resolve the PR from the trusted head SHA in the workflow_run payload --
       # never from anything Stage 1 produced. Stage 1 runs a fork's copy of the
@@ -223,21 +226,56 @@ jobs:
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
           echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
 
-      # All steps below run only when a unique open PR was resolved above. If
-      # the step skipped (no unique open PR, bot actor, superseded head),
-      # `resolved` is false and every remaining step (including the credential
-      # and agent steps) is skipped, so the job finishes green without touching
-      # AWS or posting anything.
+  # Mark the head commit "pending" so the PR shows a review is running. Without
+  # it the PR shows only the collect check, which finishes in seconds, and
+  # nothing more until the review posts. The post job overwrites this status.
+  # A run cancelled by a newer push leaves it pending on a commit that is no
+  # longer the head, which the PR does not show. No permissions block, like
+  # post: needs `statuses: write` from the caller, and is best effort without it.
+  start:
+    needs: resolve
+    if: needs.resolve.outputs.resolved == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Set pending review status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        # The context must match STATUS_CONTEXT in claude_pr_review.py so post
+        # replaces this status rather than adding a second one.
+        run: |
+          gh api "repos/$REPO/statuses/$HEAD_SHA" --silent \
+            -f state=pending -f "context=Claude review" \
+            -f "description=Review in progress" -f "target_url=$RUN_URL" \
+            || echo "::warning::Could not set the pending status; does the caller grant statuses: write?"
 
+  review:
+    needs: resolve
+    if: needs.resolve.outputs.resolved == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    # Read-only: everything this job writes goes through the post job.
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+    outputs:
+      prepared: ${{ steps.prepare.outcome == 'success' }}
+      mode: ${{ steps.prepare.outputs.mode }}
+      prior_sha: ${{ steps.prepare.outputs.prior_sha }}
+    steps:
       # Check out the PR head read-only into a subdirectory. persist-credentials
       # is false so no token is left on disk, submodules are not fetched, and the
       # repo root is left untouched. The agent reads pr-head/ but never runs it.
       - name: Checkout PR head (read-only)
-        if: steps.meta.outputs.resolved == 'true'
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.0
         with:
           repository: ${{ inputs.head_repository }}
-          ref: ${{ steps.meta.outputs.head_sha }}
+          ref: ${{ needs.resolve.outputs.head_sha }}
           path: pr-head
           persist-credentials: false
           submodules: false
@@ -246,7 +284,6 @@ jobs:
       # Remove any symlinks from the checkout so the agent's read tools can only
       # see files inside pr-head/.
       - name: Strip symlinks from PR head
-        if: steps.meta.outputs.resolved == 'true'
         run: find pr-head -type l -delete
 
       # A reusable workflow does not check out its own repository -- the only
@@ -256,7 +293,6 @@ jobs:
       # see tooling_repository / tooling_ref inputs) into workflow-tooling/.
       # persist-credentials is false so no token is left on disk.
       - name: Check out workflow tooling (requirements, review script)
-        if: steps.meta.outputs.resolved == 'true'
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.0
         with:
           repository: ${{ inputs.tooling_repository }}
@@ -278,13 +314,12 @@ jobs:
       # rather than diffing from the wrong commit.
       - name: Prepare review context
         id: prepare
-        if: steps.meta.outputs.resolved == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ steps.meta.outputs.pr_number }}
-          HEAD_SHA: ${{ steps.meta.outputs.head_sha }}
-          BASE_SHA: ${{ steps.meta.outputs.base_sha }}
+          PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+          BASE_SHA: ${{ needs.resolve.outputs.base_sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: python3 workflow-tooling/.github/scripts/claude_pr_review.py prepare
 
@@ -294,7 +329,6 @@ jobs:
       # present means a compromised release has no role credentials to exfiltrate
       # at install time. --only-binary blocks arbitrary setup.py execution.
       - name: Install Bedrock token generator (no AWS creds in env)
-        if: steps.meta.outputs.resolved == 'true'
         run: |
           set -euo pipefail
           python3 -m pip install --quiet --only-binary :all: \
@@ -304,7 +338,6 @@ jobs:
       # the IAM credentials, then unset those credentials before the agent runs.
       # role-duration-seconds bounds the token's lifetime to about an hour.
       - name: Configure AWS credentials (OIDC, mint scope only)
-        if: steps.meta.outputs.resolved == 'true'
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.0.0
         with:
           role-to-assume: ${{ secrets.bedrock_role_arn }}
@@ -312,7 +345,6 @@ jobs:
           role-duration-seconds: 3600
 
       - name: Mint Bedrock bearer token and drop IAM credentials
-        if: steps.meta.outputs.resolved == 'true'
         env:
           AWS_REGION: ${{ inputs.aws_region }}
         run: |
@@ -341,7 +373,6 @@ jobs:
       # re-reviews the same changes.
       - name: Claude PR review
         id: agent
-        if: steps.meta.outputs.resolved == 'true'
         timeout-minutes: ${{ inputs.review_timeout_minutes }}
         uses: anthropics/claude-code-action@58985842b834ed26087302ba27d07bc24ca8697a # v1.0.244
         env:
@@ -368,8 +399,8 @@ jobs:
             instruct maintainers.
 
             Repository: ${{ github.repository }}
-            PR number: ${{ steps.meta.outputs.pr_number }}
-            Head SHA: ${{ steps.meta.outputs.head_sha }}
+            PR number: ${{ needs.resolve.outputs.pr_number }}
+            Head SHA: ${{ needs.resolve.outputs.head_sha }}
             Review mode: ${{ steps.prepare.outputs.mode }}
 
             The PR head working tree is checked out (read-only) under `pr-head/`.
@@ -506,18 +537,20 @@ jobs:
   # superseded this run. No permissions block: inherits the caller's grants
   # (see the top of this file). Runs no model and no PR code.
   post:
-    needs: review
-    if: ${{ !cancelled() && needs.review.outputs.prepared == 'true' }}
+    needs: [resolve, start, review]
+    if: ${{ !cancelled() && needs.resolve.outputs.resolved == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Download review results
+        if: needs.review.outputs.prepared == 'true'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: claude-review-${{ github.run_id }}
           path: review-context
 
       - name: Check out workflow tooling (review script)
+        if: needs.review.outputs.prepared == 'true'
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.0
         with:
           repository: ${{ inputs.tooling_repository }}
@@ -527,13 +560,32 @@ jobs:
           submodules: false
 
       - name: Post review
+        if: needs.review.outputs.prepared == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ needs.review.outputs.pr_number }}
-          HEAD_SHA: ${{ needs.review.outputs.head_sha }}
-          BASE_SHA: ${{ needs.review.outputs.base_sha }}
+          PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+          BASE_SHA: ${{ needs.resolve.outputs.base_sha }}
           MODE: ${{ needs.review.outputs.mode }}
           PRIOR_SHA: ${{ needs.review.outputs.prior_sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: python3 workflow-tooling/.github/scripts/claude_pr_review.py post
+
+      # Replace the pending status that start set when nothing else will: the
+      # review job failed before it produced anything to post (a checkout or
+      # context step failed), or a step above failed before Post review set
+      # the status (an artifact download or a GitHub API error). Without this
+      # the PR head would show "Review in progress" with nothing running.
+      - name: Report unfinished review
+        if: ${{ !cancelled() && (needs.review.outputs.prepared != 'true' || failure()) }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api "repos/$REPO/statuses/$HEAD_SHA" --silent \
+            -f state=error -f "context=Claude review" \
+            -f "description=Review did not finish; push again or re-run to retry" -f "target_url=$RUN_URL" \
+            || echo "::warning::Could not set the review status; does the caller grant statuses: write?"
