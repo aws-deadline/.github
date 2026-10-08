@@ -317,15 +317,17 @@ def find_summary(comments: Iterable[dict[str, Any]]) -> tuple[int, str | None] |
 
     Only comments authored by the Actions bot count. Anyone can write the marker
     into a comment, and trusting a forged `reviewed=<sha>` would let a PR author
-    shrink the next incremental review to nothing.
+    shrink the next incremental review to nothing. The marker is the last
+    thing render_summary writes, so the last match in a body is the real one;
+    an earlier one could only have come from PR text that escaped defang().
     """
     found = None
     for c in comments:
         if ((c.get("user") or {}).get("login")) not in BOT_LOGINS:
             continue
-        m = SUMMARY_MARKER_RE.search(c.get("body") or "")
-        if m:
-            sha = m.group("sha")
+        matches = SUMMARY_MARKER_RE.findall(c.get("body") or "")
+        if matches:
+            sha = matches[-1]
             found = (c["id"], None if sha == "none" else sha)
     return found
 
@@ -538,7 +540,8 @@ def render_summary(
     else:
         state = ""
     unposted_list = "".join(
-        f"- **{SEVERITY_LABELS[f.severity]}** `{f.path}:{f.line}`{' (removed code)' if f.side == 'LEFT' else ''}: "
+        # The path comes from the PR, and a file name can hold a marker.
+        f"- **{SEVERITY_LABELS[f.severity]}** `{defang(f.path)}:{f.line}`{' (removed code)' if f.side == 'LEFT' else ''}: "
         f"{defang(' '.join(f.body.split()))[:500]}\n"
         for f in unposted
     )
