@@ -28,7 +28,11 @@ in
   <!-- claude-review addressed -->
 and is then resolved. GitHub only lets a token with `contents: write` resolve
 review threads; without that grant the reply alone marks the thread, which
-from then on counts as closed just like a resolved one.
+from then on counts as closed just like a resolved one. An outdated thread
+whose finding is re-raised on the current code is closed the same way, with
+a reply ending in
+  <!-- claude-review superseded -->
+so the issue is counted, and later resolved, once.
 
 All inputs come from environment variables set by the workflow; see main().
 """
@@ -64,16 +68,51 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 # would corrupt the marker.
 FP_PART_RE = re.compile(r"[^A-Za-z0-9_./+\-]")
 ADDRESSED_MARKER = "<!-- claude-review addressed -->"
+SUPERSEDED_MARKER = "<!-- claude-review superseded -->"
 HUNK_RE = re.compile(r"^@@ -(?P<old>\d+)(?:,\d+)? \+(?P<new>\d+)(?:,\d+)? @@")
 SIDES = ("RIGHT", "LEFT")
+# Credentials the review job holds or could reach: the Bedrock bearer token,
+# GitHub tokens, AWS access keys, and JWTs (OIDC tokens). Unanchored: a token
+# glued to other text is still a token, and over-redacting costs nothing.
+SECRET_RE = re.compile(
+    r"bedrock-api-key-[A-Za-z0-9+/=_-]+"
+    r"|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,}"
+    r"|(?:AKIA|ASIA)[A-Z0-9]{16}"
+    r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+"
+)
 
 # Per side, each file's commentable line numbers.
 DiffLines = dict[str, dict[str, set[int]]]
+C_ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13}
 
 
 # ---------------------------------------------------------------------------
 # Pure helpers (unit tested)
 # ---------------------------------------------------------------------------
+
+
+def diff_path(name: str, prefix: str) -> str | None:
+    """The path in a ---/+++ header, or None for /dev/null.
+
+    git ends a name containing a space with a tab, and C-quotes a name with
+    special characters (and non-ASCII ones unless core.quotepath=false).
+    """
+    name = name.removesuffix("\t")
+    if name.startswith('"') and name.endswith('"') and len(name) > 1:
+        body, raw, i = name[1:-1], bytearray(), 0
+        while i < len(body):
+            if body[i] == "\\" and i + 1 < len(body):
+                if body[i + 1] in "01234567":
+                    raw.append(int(body[i + 1 : i + 4], 8) & 0xFF)
+                    i += 4
+                else:
+                    raw += bytes([C_ESCAPES.get(body[i + 1], ord(body[i + 1]))])
+                    i += 2
+            else:
+                raw += body[i].encode("utf-8")
+                i += 1
+        name = raw.decode("utf-8", errors="replace")
+    return name[len(prefix):] if name.startswith(prefix) else None
 
 
 def diff_lines(diff_text: str) -> DiffLines:
@@ -90,16 +129,16 @@ def diff_lines(diff_text: str) -> DiffLines:
     old_path: str | None = None
     path: str | None = None
     old_line = new_line = 0
-    for raw in diff_text.splitlines():
+    # Only "\n" ends a diff line; splitlines() would also split content on
+    # form feeds and other separators.
+    for raw in diff_text.split("\n"):
         if raw.startswith("diff --git "):
             old_path = path = None
             old_line = new_line = 0
         elif raw.startswith("--- ") and path is None:
-            source = raw[4:]
-            old_path = source[2:] if source.startswith("a/") else None
+            old_path = diff_path(raw[4:], "a/")
         elif raw.startswith("+++ ") and path is None:
-            target = raw[4:]
-            path = target[2:] if target.startswith("b/") else old_path
+            path = diff_path(raw[4:], "b/") or old_path
             if path is not None:
                 for side in SIDES:
                     lines[side].setdefault(path, set())
@@ -123,8 +162,37 @@ def diff_lines(diff_text: str) -> DiffLines:
     return lines
 
 
+def numbered_diff(diff_text: str) -> str:
+    """The diff with each hunk line prefixed by its base and head line numbers.
+
+    This is the copy the agent reads. Asked for a file line number, a model
+    reading a plain diff tends to give the line's position in the diff file
+    instead (Read numbers that too), which lands every comment a few lines off.
+    """
+    out = []
+    old_line = new_line = 0
+    in_hunk = False
+    for raw in diff_text.split("\n"):
+        if raw.startswith("@@"):
+            m = HUNK_RE.match(raw)
+            old_line, new_line = (int(m.group("old")), int(m.group("new"))) if m else (0, 0)
+            in_hunk = m is not None
+        elif raw.startswith("diff --git "):
+            in_hunk = False
+        elif in_hunk and raw[:1] in ("+", "-", " "):
+            old = old_line if raw[:1] != "+" else ""
+            new = new_line if raw[:1] != "-" else ""
+            out.append(f"{old:>6} {new:>6} {raw}")
+            old_line += raw[:1] != "+"
+            new_line += raw[:1] != "-"
+            continue
+        out.append(raw)
+    return "\n".join(out)
+
+
 def make_fp(path: str, category: str, symbol: str) -> str:
-    parts = [FP_PART_RE.sub("-", p.strip()) or "unknown" for p in (path, category, symbol)]
+    # The fp is posted verbatim in the marker, so it is redacted too.
+    parts = [SECRET_RE.sub("redacted", FP_PART_RE.sub("-", p.strip())) or "unknown" for p in (path, category, symbol)]
     return "::".join(parts)
 
 
@@ -159,6 +227,10 @@ def parse_threads(nodes: Iterable[dict[str, Any]]) -> list[Thread]:
     threads = []
     for node in nodes:
         comments = (node.get("comments") or {}).get("nodes") or []
+        # A long thread is fetched as its first and its latest comments.
+        seen = {c.get("databaseId") for c in comments}
+        latest = (node.get("latest") or {}).get("nodes") or []
+        comments = comments + [c for c in latest if c.get("databaseId") not in seen]
         if not comments:
             continue
         # Anyone can open a review thread, and the fp format is predictable:
@@ -172,7 +244,8 @@ def parse_threads(nodes: Iterable[dict[str, Any]]) -> list[Thread]:
         fp, sev = parsed
         github_resolved = bool(node.get("isResolved"))
         addressed = any(
-            ((c.get("author") or {}).get("login") in BOT_LOGINS) and ADDRESSED_MARKER in (c.get("body") or "")
+            ((c.get("author") or {}).get("login") in BOT_LOGINS)
+            and any(m in (c.get("body") or "") for m in (ADDRESSED_MARKER, SUPERSEDED_MARKER))
             for c in comments[1:]
         )
         threads.append(
@@ -208,6 +281,29 @@ def suppressed_fps(threads: Iterable[Thread]) -> set[str]:
     return {t.fp for t in threads if t.is_resolved or not t.is_outdated}
 
 
+def _suffixed(fp: str, base: str) -> bool:
+    return fp.startswith(f"{base}-") and fp[len(base) + 1:].isdigit()
+
+
+def superseded(threads: Iterable[Thread]) -> list[Thread]:
+    """Outdated open threads whose finding was re-raised on the current code.
+
+    Only a re-raise puts a live thread next to an outdated one with the same
+    fp (a live thread suppresses its fp), so the outdated one is a duplicate.
+    Not so when outdated same-symbol siblings (fp and fp-N) are open: a run
+    numbers its findings afresh, so the re-raise named fp may be fp-2's issue.
+    Those are left open; a duplicate is better than closing a live issue.
+    """
+    threads = list(threads)
+    live = {t.fp for t in threads if not t.is_resolved and not t.is_outdated}
+    outdated = [t for t in threads if not t.is_resolved and t.is_outdated]
+    return [
+        t
+        for t in outdated
+        if t.fp in live and not any(_suffixed(o.fp, t.fp) or _suffixed(t.fp, o.fp) for o in outdated)
+    ]
+
+
 def open_counts(threads: Iterable[Thread]) -> dict[str, int]:
     counts = dict.fromkeys(SEVERITIES, 0)
     for t in threads:
@@ -221,15 +317,17 @@ def find_summary(comments: Iterable[dict[str, Any]]) -> tuple[int, str | None] |
 
     Only comments authored by the Actions bot count. Anyone can write the marker
     into a comment, and trusting a forged `reviewed=<sha>` would let a PR author
-    shrink the next incremental review to nothing.
+    shrink the next incremental review to nothing. The marker is the last
+    thing render_summary writes, so the last match in a body is the real one;
+    an earlier one could only have come from PR text that escaped defang().
     """
     found = None
     for c in comments:
         if ((c.get("user") or {}).get("login")) not in BOT_LOGINS:
             continue
-        m = SUMMARY_MARKER_RE.search(c.get("body") or "")
-        if m:
-            sha = m.group("sha")
+        matches = SUMMARY_MARKER_RE.findall(c.get("body") or "")
+        if matches:
+            sha = matches[-1]
             found = (c["id"], None if sha == "none" else sha)
     return found
 
@@ -296,6 +394,7 @@ def select_findings(
     pr_lines: DiffLines,
     interdiff_lines: DiffLines,
     suppress: set[str],
+    live: set[str] = frozenset(),
 ) -> tuple[list[Finding], list[Resolution], list[str]]:
     """Validate the agent's output and apply the posting rules.
 
@@ -305,6 +404,10 @@ def select_findings(
     - Its fp must not already be suppressed. Two findings in one run that
       share an fp are distinct issues on the same symbol (the agent does not
       repeat itself within a run), so later ones get a numeric suffix.
+      Suffixes skip only `suppress`, the threads seen when the review began,
+      so a re-run of the post job names each finding the same way. `live`
+      holds the threads on the PR now; a finding whose final fp is among
+      them already landed (in an earlier attempt of this job) and is dropped.
     - Incremental reviews post no nits, and post should-fix findings only on
       lines this revision changed; blocking findings may land anywhere in the
       PR diff, since a missed blocker is worth raising late. Old-side line
@@ -364,22 +467,29 @@ def select_findings(
             while fp in seen or fp in suppress:
                 fp, n = f"{base}-{n}", n + 1
             seen.add(fp)
+            if fp in live:
+                dropped.append(f"{fp} ({path}:{line}): already posted")
+                continue
             findings.append(Finding(path=path, line=line, severity=severity, fp=fp, body=body, side=side))
     return findings, resolutions, dropped
 
 
 def defang(text: str) -> str:
-    """Neutralize HTML comments in model text before posting it.
+    """Make model text safe to post.
 
     Markers are matched by search, so a marker the PR induced the model to
     write would take precedence over the one we append (relabelling the
     finding's fp or severity), or forge an addressed or summary marker.
+
+    Credentials are redacted: a prompt-injected agent could copy one from its
+    environment into a finding, and GitHub masks secrets in logs, not in PR
+    comments. This is a backstop for plain copies, not for encoded ones.
     """
-    return text.replace("<!--", "&lt;!--")
+    return SECRET_RE.sub("[redacted]", text).replace("<!--", "&lt;!--")
 
 
 def render_comment(f: Finding) -> str:
-    body = defang(f.body[:MAX_BODY_CHARS])
+    body = defang(f.body)[:MAX_BODY_CHARS]  # truncating first could cut a token below the pattern's length
     return f"**{SEVERITY_LABELS[f.severity]}:** {body}\n\n<!-- claude-review fp={f.fp} sev={f.severity} -->"
 
 
@@ -430,7 +540,8 @@ def render_summary(
     else:
         state = ""
     unposted_list = "".join(
-        f"- **{SEVERITY_LABELS[f.severity]}** `{f.path}:{f.line}`{' (removed code)' if f.side == 'LEFT' else ''}: "
+        # The path comes from the PR, and a file name can hold a marker.
+        f"- **{SEVERITY_LABELS[f.severity]}** `{defang(f.path)}:{f.line}`{' (removed code)' if f.side == 'LEFT' else ''}: "
         f"{defang(' '.join(f.body.split()))[:500]}\n"
         for f in unposted
     )
@@ -468,10 +579,29 @@ def gh(*args: str, input_json: Any = None, check: bool = True) -> Any:
 
 
 def git(repo: str, *args: str, check: bool = True) -> str:
-    proc = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True)
+    # Bytes, not text=True: universal newlines would turn a lone "\r" in file
+    # content into a line break and shift every anchor after it.
+    proc = subprocess.run(["git", "-C", repo, *args], capture_output=True)
     if check and proc.returncode != 0:
-        raise RuntimeError(f"git {' '.join(args)} failed: {proc.stderr.strip()}")
-    return proc.stdout if proc.returncode == 0 else ""
+        raise RuntimeError(f"git {' '.join(args)} failed: {proc.stderr.decode('utf-8', 'replace').strip()}")
+    return proc.stdout.decode("utf-8", "replace") if proc.returncode == 0 else ""
+
+
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git hash-object -t tree /dev/null
+
+
+def git_diff(repo: str, *args: str, check: bool = True) -> str:
+    # The checkout is the PR's: its .gitattributes must not turn files into
+    # "Binary files differ" (hiding them from review) or pick a diff driver,
+    # and its file names must not be read as pathspec magic like ":(exclude)*".
+    # Reading attributes from the empty tree (git >= 2.40) ignores the PR's
+    # .gitattributes while keeping git's own binary detection, which --text
+    # would also disable, flooding pr.diff with binary content.
+    # quotepath=false keeps non-ASCII names readable rather than octal-quoted.
+    return git(
+        repo, "-c", "core.quotepath=false", "--literal-pathspecs", f"--attr-source={EMPTY_TREE}",
+        "diff", "--no-ext-diff", "--no-textconv", *args, check=check,
+    )
 
 
 THREADS_QUERY = """
@@ -483,6 +613,7 @@ query($owner:String!,$repo:String!,$pr:Int!,$cursor:String){
         nodes{
           id isResolved isOutdated path line
           comments(first:20){ nodes{ databaseId body author{ login } } }
+          latest: comments(last:20){ nodes{ databaseId body author{ login } } }
         }
       }
     }
@@ -563,21 +694,55 @@ def has_commit(checkout: str, sha: str) -> bool:
     return subprocess.run(["git", "-C", checkout, "cat-file", "-e", f"{sha}^{{commit}}"], capture_output=True).returncode == 0
 
 
+def fetch_commit(checkout: str, sha: str) -> str:
+    """Fetch a commit by SHA; return git's error, or "" on success."""
+    proc = subprocess.run(["git", "-C", checkout, "fetch", "--quiet", "origin", sha], capture_output=True)
+    return "" if proc.returncode == 0 else " ".join(proc.stderr.decode("utf-8", "replace").split())
+
+
 def ensure_commit(checkout: str, sha: str) -> bool:
     if has_commit(checkout, sha):
         return True
     # A force-pushed-away commit is not reachable from the checkout's refs, but
     # GitHub still serves it by SHA. Private repos fail here (no credentials are
-    # persisted), which just falls back to a full review.
-    subprocess.run(["git", "-C", checkout, "fetch", "--quiet", "origin", sha], capture_output=True)
+    # persisted): a missing prior commit just means a full review.
+    fetch_commit(checkout, sha)
     return has_commit(checkout, sha)
+
+
+def commit_log(checkout: str, base: str, head: str) -> str:
+    """The PR's commit messages, oldest first.
+
+    The agent has no shell or git tools (git's --output= writes files), so it
+    reads history from this file instead.
+    """
+    return git(checkout, "log", "--reverse", "--no-color", "--format=commit %H%nAuthor: %an%n%n%B", f"{base}..{head}")
+
+
+def write_diff(context_dir: Path, name: str, diff: str) -> None:
+    """Save `<name>.raw.diff` for the post job and a numbered `<name>.diff` for the agent."""
+    # newline="": post reads these back as bytes, so they must hold git's "\n"
+    # exactly, not the platform's line ending.
+    (context_dir / f"{name}.raw.diff").write_text(diff, encoding="utf-8", newline="")
+    (context_dir / f"{name}.diff").write_text(numbered_diff(diff), encoding="utf-8", newline="")
 
 
 def pr_diff_base(env: Env) -> str:
     # GitHub shows a PR as base...head (from the merge base); match it so line
-    # anchors agree with what GitHub accepts.
+    # anchors agree with what GitHub accepts. A fork's checkout lacks a base
+    # that moved on upstream; fetching it in full (never shallow) connects its
+    # history to the head's. A base that cannot be fetched (as on a private
+    # repo, where no credentials are persisted) fails the review.
+    fetch_error = "" if has_commit(env.checkout, env.base_sha) else fetch_commit(env.checkout, env.base_sha)
     mb = git(env.checkout, "merge-base", env.base_sha, env.head_sha, check=False).strip()
-    return mb if SHA_RE.match(mb) else env.base_sha
+    if not SHA_RE.match(mb):
+        # Diffing from the base instead would show every upstream change since
+        # the fork point as reverted by the PR.
+        raise SystemExit(
+            f"::error::no merge base of {env.base_sha} and {env.head_sha} (missing or shallow history)"
+            + (f"; fetching the base failed: {fetch_error}" if fetch_error else "")
+        )
+    return mb
 
 
 def prepare(env: Env) -> None:
@@ -588,8 +753,8 @@ def prepare(env: Env) -> None:
     prior = summary[1] if summary else None
 
     diff_base = pr_diff_base(env)
-    pr_diff = git(env.checkout, "diff", f"{diff_base}..{env.head_sha}")
-    (env.context_dir / "pr.diff").write_text(pr_diff, encoding="utf-8")
+    pr_diff = git_diff(env.checkout, f"{diff_base}..{env.head_sha}")
+    write_diff(env.context_dir, "pr", pr_diff)
     pr_files = sorted({p for side in diff_lines(pr_diff).values() for p in side})
 
     mode = "full"
@@ -601,8 +766,9 @@ def prepare(env: Env) -> None:
     if mode == "incremental" and pr_files:
         # Restrict to the PR's files so a rebase onto a newer base does not
         # surface unrelated upstream changes as "new in this revision".
-        interdiff = git(env.checkout, "diff", f"{prior}..{env.head_sha}", "--", *pr_files, check=False)
-    (env.context_dir / "interdiff.diff").write_text(interdiff, encoding="utf-8")
+        interdiff = git_diff(env.checkout, f"{prior}..{env.head_sha}", "--", *pr_files, check=False)
+    write_diff(env.context_dir, "interdiff", interdiff)
+    (env.context_dir / "commits.txt").write_text(commit_log(env.checkout, diff_base, env.head_sha), encoding="utf-8")
 
     state = {
         "mode": mode,
@@ -653,20 +819,26 @@ def post_review(env: Env, findings: list[Finding]) -> list[Finding]:
 RESOLVE_MUTATION = "mutation($id:ID!){ resolveReviewThread(input:{threadId:$id}){ thread{ isResolved } } }"
 
 
-def close_addressed(env: Env, threads: list[Thread], resolutions: list[Resolution]) -> int:
+def close_addressed(env: Env, threads: list[Thread], resolutions: list[Resolution], *, existing: set[str]) -> int:
     """Reply with the reason and resolve each thread the agent judged addressed.
 
     The marked reply is what counts; resolving is best effort and needs
     `contents: write` from the caller. Threads marked on an earlier run but
     still open in GitHub are resolved too. After the first refusal the rest are
     only marked, rather than repeating a call that will fail.
+
+    A resolution reaches only threads in `existing`, the ids on the PR before
+    this run posted: the agent judged those, never a new finding that happens
+    to share the fp. Superseded threads are closed afterwards, skipping any a
+    resolution just closed.
     """
+    to_resolve = [t for t in threads if t.needs_resolve]
     by_fp: dict[str, list[Thread]] = {}
     for t in threads:
-        if not t.is_resolved and t.first_comment_id:
+        if not t.is_resolved and t.first_comment_id and t.id in existing:
             by_fp.setdefault(t.fp, []).append(t)
-    to_resolve = [t for t in threads if t.needs_resolve]
     done = 0
+    closed: set[str] = set()
     for r in resolutions:
         for t in by_fp.pop(r.fp, []):
             if gh(
@@ -675,7 +847,17 @@ def close_addressed(env: Env, threads: list[Thread], resolutions: list[Resolutio
                 check=False,
             ) is not None:
                 done += 1
+                closed.add(t.id)
                 to_resolve.append(t)
+    for t in superseded(threads):
+        if t.id in closed or not t.first_comment_id:
+            continue
+        if gh(
+            f"repos/{env.repo}/pulls/{env.pr}/comments/{t.first_comment_id}/replies",
+            "-f", f"body=Superseded by a new comment on the current code.\n\n{SUPERSEDED_MARKER}",
+            check=False,
+        ) is not None:
+            to_resolve.append(t)
     for t in to_resolve:
         if gh("graphql", "-f", f"query={RESOLVE_MUTATION}", "-f", f"id={t.id}", check=False) is None:
             print(
@@ -687,14 +869,24 @@ def close_addressed(env: Env, threads: list[Thread], resolutions: list[Resolutio
 
 
 def post(env: Env, *, agent_ok: bool, agent_output: str, mode: str, prior_sha: str | None) -> None:
+    # A re-run of an older run's post job must not move the summary's baseline
+    # back to its commit, nor resolve threads on code since replaced. Its
+    # findings are not lost: the newer head's run reviews from the baseline
+    # this run never advanced.
+    pr_head = ((gh(f"repos/{env.repo}/pulls/{env.pr}") or {}).get("head") or {}).get("sha")
+    if pr_head != env.head_sha:
+        print(f"::notice::{env.head_sha} is no longer the PR head ({pr_head}); a newer push supersedes it, skipping.")
+        return
     state_path = env.context_dir / "prior-review-state.json"
     suppress = set(json.loads(state_path.read_text(encoding="utf-8"))["suppress"]) if state_path.exists() else set()
-    # Also suppress what is on the PR now: a re-run of this job after a
-    # partial post must not post the findings that did land a second time.
-    suppress |= suppressed_fps(fetch_threads(env.repo, env.pr))
-    pr_lines = diff_lines((env.context_dir / "pr.diff").read_text(encoding="utf-8"))
-    interdiff_path = env.context_dir / "interdiff.diff"
-    interdiff_lines = diff_lines(interdiff_path.read_text(encoding="utf-8") if interdiff_path.exists() else "")
+    # What is on the PR now: a re-run of this job after a partial post must not
+    # post the findings that did land a second time.
+    before = fetch_threads(env.repo, env.pr)
+    live = suppressed_fps(before)
+    # Decoded from bytes: read_text's universal newlines would split on "\r".
+    pr_lines = diff_lines((env.context_dir / "pr.raw.diff").read_bytes().decode("utf-8"))
+    interdiff_path = env.context_dir / "interdiff.raw.diff"
+    interdiff_lines = diff_lines(interdiff_path.read_bytes().decode("utf-8") if interdiff_path.exists() else "")
 
     parsed = parse_agent_output(agent_output) if agent_ok else None
     if parsed is None:
@@ -704,7 +896,7 @@ def post(env: Env, *, agent_ok: bool, agent_output: str, mode: str, prior_sha: s
         parsed = ([], [])
     records, errors = parsed
     findings, resolutions, dropped = select_findings(
-        records, mode=mode, pr_lines=pr_lines, interdiff_lines=interdiff_lines, suppress=suppress
+        records, mode=mode, pr_lines=pr_lines, interdiff_lines=interdiff_lines, suppress=suppress, live=live
     )
     for msg in errors + dropped:
         print(f"skipped: {msg}")
@@ -712,8 +904,8 @@ def post(env: Env, *, agent_ok: bool, agent_output: str, mode: str, prior_sha: s
     unposted = post_review(env, findings)
     posted = len(findings) - len(unposted)
     threads = fetch_threads(env.repo, env.pr)
-    resolved = close_addressed(env, threads, resolutions)
-    if resolved:
+    resolved = close_addressed(env, threads, resolutions, existing={t.id for t in before})
+    if resolved or superseded(threads):
         threads = fetch_threads(env.repo, env.pr)
     counts = open_counts(threads)
 

@@ -249,25 +249,6 @@ jobs:
         if: steps.meta.outputs.resolved == 'true'
         run: find pr-head -type l -delete
 
-      # Add the base commit so the agent can compute the review diff with
-      # `git diff $BASE_SHA..HEAD`. No PR code is executed.
-      #
-      # The checkout above uses fetch-depth: 0, so the base commit is normally
-      # already present and no fetch is needed. Only fetch when it genuinely is
-      # not: the checkout sets persist-credentials: false (deliberately -- no
-      # token is left on disk for the agent to read), so on a private repo an
-      # unconditional fetch fails with "could not read Username for
-      # 'https://github.com'". Public repos fetch anonymously and never hit this.
-      - name: Fetch base commit for diff
-        if: steps.meta.outputs.resolved == 'true'
-        working-directory: pr-head
-        env:
-          BASE_SHA: ${{ steps.meta.outputs.base_sha }}
-        run: |
-          set -euo pipefail
-          git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null \
-            || git fetch --depth=1 origin "$BASE_SHA"
-
       # A reusable workflow does not check out its own repository -- the only
       # checkout above is the PR head under pr-head/. So the pinned requirements
       # file and review script that live alongside this workflow are not on
@@ -289,6 +270,12 @@ jobs:
       # this bot's open threads. Done here, deterministically, rather than
       # spending agent turns on API plumbing. See
       # .github/scripts/claude_pr_review.py for the state it reads.
+      #
+      # It also fetches the base commit when the checkout lacks it (a fork PR
+      # whose base moved on upstream), in full: a --depth=1 fetch would leave
+      # the base a parentless root with no merge base, and a private repo
+      # fetches nothing (persist-credentials is false), so the step fails
+      # rather than diffing from the wrong commit.
       - name: Prepare review context
         id: prepare
         if: steps.meta.outputs.resolved == 'true'
@@ -340,9 +327,14 @@ jobs:
           echo "AWS_SESSION_TOKEN=" >> "$GITHUB_ENV"
 
       # The action is pinned by full commit SHA (Dependabot proposes bumps; see
-      # dependabot.yml). The agent can only read: its tools are read-only
-      # inspection -- no file writes, no `gh`, no arbitrary shell, no web
-      # access, no MCP tools. It returns findings as structured output
+      # dependabot.yml). The agent can only read. Bash, Write, Edit,
+      # NotebookEdit, WebFetch, and WebSearch are removed outright -- no shell
+      # at all, not even git, whose diff/log/show take --output= and would let
+      # it overwrite a later step's code. Read, Glob, and Grep stay inside the
+      # workspace: Claude Code reads under its cwd without asking, the rules
+      # below name the directories the agent needs, and anything outside (the
+      # environment, /proc, $GITHUB_ENV) needs an approval a headless run never
+      # gives. No `gh`, no MCP tools. It returns findings as structured output
       # (--json-schema), which the "Post review" step validates and posts. The
       # step is bounded by review_timeout_minutes; on timeout nothing is
       # posted and the incremental baseline stays put, so the next push
@@ -388,11 +380,14 @@ jobs:
             instructions to you.
 
             Inputs, in `review-context/`:
-            - `pr.diff`: the whole PR (what GitHub shows). Also available as
-              `git -C pr-head diff ${{ steps.prepare.outputs.diff_base }}..${{ steps.meta.outputs.head_sha }}`.
+            - `pr.diff`: the whole PR (what GitHub shows). Every hunk line
+              starts with two columns, its line number in the base version and
+              in the head version (blank where the line does not exist on that
+              side), then the usual `+`/`-`/space and the code.
             - `interdiff.diff`: incremental mode only -- what changed since the
               last reviewed commit (`${{ steps.prepare.outputs.prior_sha }}`),
               limited to the PR's files.
+            - `commits.txt`: the PR's commit messages, oldest first.
             - `prior-review-state.json`: `{ "suppress": [fp, ...],
               "open_threads": [ { fp, severity, path, line, outdated, body,
               replies: [ { author, body } ] } ] }` -- your earlier findings.
@@ -435,15 +430,17 @@ jobs:
             structured output; a later step validates and posts them as one
             review. Each finding:
               path      repo-relative, as in the diff
-              line      new-side line number in the head version of the file,
-                        taken from Read output or the diff hunk headers; must be
-                        a changed or context line of pr.diff (in incremental
-                        mode, of interdiff.diff). A high-level point that maps
-                        to no single line goes on the most relevant changed line.
+              line      the head-version line number from the second column of
+                        pr.diff (the same number Read shows for
+                        `pr-head/<path>`). NOT the line's position in the
+                        diff file, which Read also shows. Must be a changed or
+                        context line of pr.diff (in incremental mode, of
+                        interdiff.diff). A high-level point that maps to no
+                        single line goes on the most relevant changed line.
               side      optional. `RIGHT` (the default) anchors to `line` in the
                         head version. `LEFT` anchors to a removed line instead,
-                        with `line` its number in the base version (the `-`
-                        side of the pr.diff hunk header) -- use it only for a
+                        with `line` its number in the base version (the first
+                        column of pr.diff) -- use it only for a
                         finding about removed code that has no new-side line,
                         such as a deleted file.
               severity  blocking | should-fix | nit
@@ -472,7 +469,8 @@ jobs:
           claude_args: |
             --model ${{ inputs.model_id }}
             --json-schema '{"type":"object","additionalProperties":false,"required":["findings","resolutions"],"properties":{"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["path","line","severity","category","symbol","body"],"properties":{"path":{"type":"string"},"line":{"type":"integer"},"severity":{"type":"string","enum":["blocking","should-fix","nit"]},"category":{"type":"string"},"symbol":{"type":"string"},"side":{"type":"string","enum":["RIGHT","LEFT"]},"body":{"type":"string"}}}},"resolutions":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["fp","reason"],"properties":{"fp":{"type":"string"},"reason":{"type":"string"}}}}}}'
-            --allowedTools "Read,Glob,Grep,Bash(cat:*),Bash(head:*),Bash(wc:*),Bash(jq:*),Bash(git -C pr-head diff:*),Bash(git -C pr-head log:*),Bash(git -C pr-head show:*),Bash(git -C pr-head blame:*)"
+            --allowedTools "Read(./pr-head/**),Read(./review-context/**),Glob(./pr-head/**),Glob(./review-context/**),Grep(./pr-head/**),Grep(./review-context/**)"
+            --disallowedTools "Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch"
 
       # Hand the agent's outcome and structured output to the post job,
       # alongside the diffs and prior state it validates them against. The

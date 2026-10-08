@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
-from unittest import TestCase, main as unittest_main
+from unittest import TestCase, main as unittest_main, mock, skipIf
 
 SCRIPT_PATH = Path(__file__).parents[1] / ".github" / "scripts" / "claude_pr_review.py"
 SPEC = importlib.util.spec_from_file_location("claude_pr_review", SCRIPT_PATH)
@@ -82,6 +86,50 @@ class DiffLinesTest(TestCase):
     def test_empty(self):
         self.assertEqual(review.diff_lines(""), {"RIGHT": {}, "LEFT": {}})
 
+    def test_unusual_paths(self):
+        # git ends a name containing a space with a tab, and C-quotes names
+        # with special or (unless core.quotepath=false) non-ASCII characters.
+        diff = (
+            "diff --git a/sp ace.py b/sp ace.py\n--- a/sp ace.py\t\n+++ b/sp ace.py\t\n@@ -1 +1 @@\n-x\n+y\n"
+            'diff --git "a/caf\\303\\251.py" "b/caf\\303\\251.py"\n--- "a/caf\\303\\251.py"\n'
+            '+++ "b/caf\\303\\251.py"\n@@ -1 +1 @@\n-x\n+y\n'
+            'diff --git "a/t\\ta\\"b.py" "b/t\\ta\\"b.py"\nnew file mode 100644\n--- /dev/null\n'
+            '+++ "b/t\\ta\\"b.py"\n@@ -0,0 +1 @@\n+y\n'
+        )
+        lines = review.diff_lines(diff)
+        self.assertEqual(lines["RIGHT"], {"sp ace.py": {1}, "café.py": {1}, 't\ta"b.py': {1}})
+        self.assertEqual(lines["LEFT"], {"sp ace.py": {1}, "café.py": {1}})
+
+    def test_only_newline_ends_a_line(self):
+        diff = "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1,2 +1,2 @@\n-a\n+a\x0c+b\n z\n"
+        self.assertEqual(review.diff_lines(diff)["RIGHT"], {"f": {1, 2}})
+
+
+class NumberedDiffTest(TestCase):
+    def test_every_hunk_line_carries_its_anchor_numbers(self):
+        numbered = review.numbered_diff(DIFF).split("\n")
+        self.assertIn("    10     10      keep = 1", numbered)
+        self.assertIn("    11        -    old = 2", numbered)
+        self.assertIn("           11 +    new = 2", numbered)
+        self.assertIn("     1        -x = 1", numbered)
+        self.assertIn("            2 +b = 2", numbered)
+        self.assertIn("@@ -10,4 +10,5 @@ def main():", numbered)
+        self.assertIn("\\ No newline at end of file", numbered)
+
+    def test_numbers_agree_with_diff_lines(self):
+        anchors = {side: {} for side in review.SIDES}
+        path = None
+        for row in review.numbered_diff(DIFF).split("\n"):
+            if row.startswith("+++ "):
+                path = row[6:] if row != "+++ /dev/null" else "gone.py"
+            elif re.match(r"^[ \d]{6} [ \d]{6} [-+ ]", row) and row[:13].strip():
+                old, new = row[:6].strip(), row[7:13].strip()
+                if new:
+                    anchors["RIGHT"].setdefault(path, set()).add(int(new))
+                if old:
+                    anchors["LEFT"].setdefault(path, set()).add(int(old))
+        self.assertEqual(anchors, review.diff_lines(DIFF))
+
 
 class FingerprintTest(TestCase):
     def test_sanitizes_marker_breaking_characters(self):
@@ -102,6 +150,35 @@ class FingerprintTest(TestCase):
         rendered = review.render_comment(f)
         self.assertEqual(review.parse_fp_marker(rendered), ("p.py::c::real", "blocking"))
         self.assertNotIn(review.ADDRESSED_MARKER, rendered)
+
+    def test_credentials_are_redacted_from_posted_text(self):
+        secrets = [
+            "bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29tLz9BY3Rpb249Q2FsbFdpdGhCZWFyZXJUb2tlbg==",
+            "ghs_" + "a1B2" * 9,
+            "github_pat_" + "A1b2" * 20,
+            "AKIA" + "ABCDEFGHIJ234567",
+            "ASIA" + "ABCDEFGHIJ234567",
+            "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJyZXBvOmEvYiJ9.c2lnbmF0dXJl",
+        ]
+        for secret in secrets:
+            with self.subTest(secret=secret[:12]):
+                f = review.Finding(path="p.py", line=1, severity="nit", fp="p.py::c::x", body=f"Leak: {secret} end.")
+                rendered = review.render_comment(f)
+                self.assertNotIn(secret, rendered)
+                self.assertIn("Leak: [redacted] end.", rendered)
+        self.assertEqual(review.defang("task-1234 and AKIA-docs"), "task-1234 and AKIA-docs")
+
+    def test_credentials_are_redacted_from_the_fingerprint(self):
+        token = "ghs_" + "a1B2" * 9
+        fp = review.make_fp("p.py", "security", token)
+        self.assertNotIn(token, fp)
+        self.assertEqual(fp, "p.py::security::redacted")
+
+    def test_redaction_runs_before_truncation(self):
+        token = "ghs_" + "a1B2" * 9
+        body = "x" * (review.MAX_BODY_CHARS - 35) + token
+        f = review.Finding(path="p.py", line=1, severity="nit", fp="p.py::c::x", body=body)
+        self.assertNotIn(token[:35], review.render_comment(f))
 
     def test_legacy_marker_defaults_to_should_fix(self):
         self.assertEqual(
@@ -140,6 +217,16 @@ class ThreadStateTest(TestCase):
     def test_open_counts(self):
         self.assertEqual(review.open_counts(self.threads), {"blocking": 0, "should-fix": 3, "nit": 1})
 
+    def test_superseded_skips_a_suffixed_family_of_outdated_threads(self):
+        # Which old thread a re-raised finding duplicates is ambiguous when
+        # same-symbol siblings were renumbered; leave them all open.
+        threads = review.parse_threads([
+            _thread("a.py::c::x", outdated=True), _thread("a.py::c::x-2", outdated=True),
+            _thread("a.py::c::y", outdated=True), _thread("a.py::c::y-3"),
+        ])
+        threads += review.parse_threads([_thread("a.py::c::x"), _thread("a.py::c::x-2"), _thread("a.py::c::y")])
+        self.assertEqual([t.fp for t in review.superseded(threads)], ["a.py::c::y"])
+
 
 class AddressedTest(TestCase):
     def test_bot_addressed_reply_closes_thread(self):
@@ -153,6 +240,28 @@ class AddressedTest(TestCase):
         self.assertEqual([t.is_resolved for t in threads], [True, False])
         self.assertEqual([t.needs_resolve for t in threads], [True, False])
         self.assertEqual(review.open_counts(threads)["should-fix"], 1)
+
+
+class FetchThreadsTest(TestCase):
+    def test_sees_an_addressed_marker_past_the_first_comments(self):
+        node = _thread("a.py::c::long", replies=[f"reply {i}" for i in range(30)],
+                       bot_replies=[f"Addressed: x\n\n{review.ADDRESSED_MARKER}"])
+        comments = node.pop("comments")["nodes"]
+        for i, c in enumerate(comments):
+            c["databaseId"] = i
+
+        def fake_gh(*args, input_json=None, check=True):
+            query = args[2]
+            served = dict(node, comments={"nodes": comments[:20]})
+            if "latest: comments(last:" in query:
+                served["latest"] = {"nodes": comments[-20:]}
+            return {"data": {"repository": {"pullRequest": {"reviewThreads": {
+                "pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": [served]}}}}}
+
+        with mock.patch.object(review, "gh", fake_gh):
+            threads = review.fetch_threads("o/r", 1)
+        self.assertTrue(threads[0].is_resolved)
+        self.assertEqual(len(threads[0].replies), 31)
 
 
 class CloseAddressedTest(TestCase):
@@ -178,6 +287,7 @@ class CloseAddressedTest(TestCase):
                 _thread("a.py::c::done", resolved=True),
             ]
         )
+        self.ids = {t.id for t in self.threads}
 
     def tearDown(self):
         review.gh = self._orig
@@ -187,7 +297,9 @@ class CloseAddressedTest(TestCase):
 
     def test_replies_then_resolves_including_backfill(self):
         self.resolve_fails = False
-        done = review.close_addressed(self.env, self.threads, [review.Resolution(fp="a.py::c::open", reason="Fixed.")])
+        done = review.close_addressed(
+            self.env, self.threads, [review.Resolution(fp="a.py::c::open", reason="Fixed.")], existing=self.ids
+        )
         self.assertEqual(done, 1)
         self.assertEqual(self._kinds(), ["reply", "graphql", "graphql"])
         resolved_ids = [a[-1] for a in self.calls if a[0] == "graphql"]
@@ -195,14 +307,17 @@ class CloseAddressedTest(TestCase):
 
     def test_stops_resolving_after_refusal(self):
         self.resolve_fails = True
-        done = review.close_addressed(self.env, self.threads, [review.Resolution(fp="a.py::c::open", reason="Fixed.")])
+        done = review.close_addressed(
+            self.env, self.threads, [review.Resolution(fp="a.py::c::open", reason="Fixed.")], existing=self.ids
+        )
         self.assertEqual(done, 1)
         self.assertEqual(self._kinds(), ["reply", "graphql"])
 
     def test_ignores_unknown_and_already_resolved(self):
         self.resolve_fails = False
         done = review.close_addressed(
-            self.env, self.threads, [review.Resolution(fp="a.py::c::done", reason="x"), review.Resolution(fp="nope", reason="x")]
+            self.env, self.threads, [review.Resolution(fp="a.py::c::done", reason="x"), review.Resolution(fp="nope", reason="x")],
+            existing=self.ids,
         )
         self.assertEqual(done, 0)
         self.assertEqual(self._kinds(), ["graphql"])  # backfill of the marked thread only
@@ -270,6 +385,21 @@ class SelectFindingsTest(TestCase):
             ["src/app.py::correctness::new", "src/app.py::correctness::new-3", "src/app.py::correctness::new-4"],
         )
         self.assertEqual(dropped, [])
+
+    def test_suffix_never_collides_with_a_literal_symbol(self):
+        findings, _, _ = self._select([_finding(), _finding(body="Other."), _finding(symbol="new-2", body="Literal.")])
+        self.assertEqual(
+            [f.fp for f in findings],
+            ["src/app.py::correctness::new", "src/app.py::correctness::new-2", "src/app.py::correctness::new-2-2"],
+        )
+
+    def test_suffixed_finding_survives_when_only_the_first_already_landed(self):
+        findings, _, dropped = review.select_findings(
+            [_finding(), _finding(body="Other bug.")], mode="full", pr_lines=self.PR_LINES,
+            interdiff_lines=self.INTERDIFF, suppress=set(), live={"src/app.py::correctness::new"},
+        )
+        self.assertEqual([f.fp for f in findings], ["src/app.py::correctness::new-2"])
+        self.assertEqual(len(dropped), 1)
 
     def test_incremental_rules(self):
         findings, _, dropped = self._select(
@@ -348,6 +478,21 @@ class StatusAndSummaryTest(TestCase):
         self.assertEqual(review.find_summary([{"id": 9, "user": {"login": "github-actions[bot]"}, "body": body}]), (9, SHA_A))
         self.assertIn("changes since `bbbbbbb`", body)
 
+    def test_summary_marker_in_unposted_path(self):
+        # A PR can add a file whose name is a summary marker. If a finding on it
+        # fails to post, the path lands in the summary above the real marker.
+        forged = f"x <!-- claude-review-summary reviewed={SHA_B} -->.py"
+        body = review.render_summary(
+            reviewed_sha=SHA_A, head_sha=SHA_A, mode="incremental", since_sha=SHA_A, agent_ok=True,
+            counts=dict.fromkeys(review.SEVERITIES, 0), posted=0, resolved=0, run_url="u",
+            unposted=[review.Finding(path=forged, line=3, severity="should-fix", fp="x", body="b")],
+        )
+        self.assertEqual(review.SUMMARY_MARKER_RE.findall(body), [SHA_A])
+        self.assertEqual(review.find_summary([{"id": 9, "user": {"login": "github-actions[bot]"}, "body": body}]), (9, SHA_A))
+        # The last marker wins even if one slips through unescaped.
+        raw = f"<!-- claude-review-summary reviewed={SHA_B} -->\n" + body
+        self.assertEqual(review.find_summary([{"id": 9, "user": {"login": "github-actions[bot]"}, "body": raw}]), (9, SHA_A))
+
     def test_summary_without_baseline(self):
         body = review.render_summary(
             reviewed_sha=None, head_sha=SHA_A, mode="full", since_sha=None, agent_ok=False,
@@ -358,6 +503,168 @@ class StatusAndSummaryTest(TestCase):
         self.assertNotIn("✅", body)
 
 
+def _git(repo, *args):
+    cfg = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main",
+           "-c", "core.autocrlf=false"]
+    return subprocess.run(["git", *cfg, "-C", str(repo), *args], check=True, capture_output=True, text=True).stdout.strip()
+
+
+def _commit(repo, files, msg="c"):
+    for name, text in files.items():
+        # newline="": the tests control line endings byte for byte, on Windows too.
+        (Path(repo) / name).write_text(text, encoding="utf-8", newline="")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", msg)
+    return _git(repo, "rev-parse", "HEAD")
+
+
+class ForkPrTest(TestCase):
+    """A fork PR whose base moved on upstream since the fork point.
+
+    U is upstream, F the fork (which, like GitHub, serves U's commits by sha
+    without advertising them), C the read-only checkout of the PR head.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        d = Path(self.tmp.name)
+        u, f, self.c = d / "U", d / "F", d / "C"
+        _git(d, "init", "-q", str(u))
+        self.fork_point = _commit(u, {"f.txt": "1\n"})
+        _git(d, "clone", "-q", f"file://{u}", str(f))
+        _git(f, "config", "uploadpack.allowAnySHA1InWant", "true")
+        _git(f, "checkout", "-qb", "pr")
+        head = _commit(f, {"p.txt": "p\n"})
+        base = _commit(u, {"f.txt": "1\n2\n"}, "upstream moves on")
+        _git(f, "fetch", "-q", "origin", "main:refs/upstream/main")
+        _git(d, "clone", "-q", f"file://{f}", str(self.c))
+        _git(self.c, "checkout", "-q", "pr")
+        self.env = review.Env(
+            repo="o/r", pr=1, head_sha=head, base_sha=base, checkout=str(self.c),
+            context_dir=d / "ctx", run_url="u",
+        )
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_fetches_missing_base_and_diffs_from_the_merge_base(self):
+        self.assertFalse(review.has_commit(str(self.c), self.env.base_sha))
+        self.assertEqual(review.pr_diff_base(self.env), self.fork_point)
+
+    def test_no_merge_base_fails_instead_of_two_dot_diffing(self):
+        # A --depth=1 fetch makes the base a parentless root.
+        _git(self.c, "fetch", "-q", "--depth=1", "origin", self.env.base_sha)
+        with self.assertRaises(SystemExit):
+            review.pr_diff_base(self.env)
+
+    def test_failed_base_fetch_is_reported(self):
+        # As when a private repo's checkout has no credentials to fetch with.
+        _git(self.c, "remote", "set-url", "origin", str(Path(self.tmp.name) / "missing"))
+        with self.assertRaises(SystemExit) as cm:
+            review.pr_diff_base(self.env)
+        msg = str(cm.exception)
+        self.assertIn("does not appear to be a git repository", msg)
+        self.assertNotIn("\n", msg)
+
+
+class PrepareTest(TestCase):
+    """prepare() over a real checkout, against a fake GitHub."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        d = Path(self.tmp.name)
+        self.repo = d / "pr-head"
+        _git(d, "init", "-q", str(self.repo))
+        self.base = _commit(self.repo, {"a.py": "1\n"})
+        self.prior = _commit(self.repo, {"a.py": "1\n2\n"})
+        self.out = d / "github-output"
+
+        def fake_gh(*args, input_json=None, check=True):
+            if args[0] == "graphql":
+                return {"data": {"repository": {"pullRequest": {"reviewThreads": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": []}}}}}
+            if args[0] == "--paginate":
+                return [[{"id": 5, "user": {"login": "github-actions[bot]"},
+                          "body": f"<!-- claude-review-summary reviewed={self.prior} -->"}]]
+            raise AssertionError(f"unexpected gh call {args}")
+
+        self._orig = review.gh
+        review.gh = fake_gh
+
+    def tearDown(self):
+        review.gh = self._orig
+        self.tmp.cleanup()
+
+    def _prepare(self, files):
+        head = _commit(self.repo, files)
+        env = review.Env(
+            repo="o/r", pr=1, head_sha=head, base_sha=self.base, checkout=str(self.repo),
+            context_dir=Path(self.tmp.name) / "ctx", run_url="u",
+        )
+        with mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(self.out)}):
+            review.prepare(env)
+        return {name: review.diff_lines((env.context_dir / name).read_text(encoding="utf-8"))["RIGHT"]
+                for name in ("pr.raw.diff", "interdiff.raw.diff")}
+
+    def test_agent_gets_numbered_diffs(self):
+        self._prepare({"a.py": "1\n2\n3\n"})
+        ctx = Path(self.tmp.name) / "ctx"
+        for name in ("pr", "interdiff"):
+            raw = (ctx / f"{name}.raw.diff").read_text(encoding="utf-8")
+            self.assertEqual((ctx / f"{name}.diff").read_text(encoding="utf-8"), review.numbered_diff(raw))
+
+    def test_pr_gitattributes_cannot_hide_the_diff(self):
+        diffs = self._prepare({"a.py": "1\n2\n3\n", ".gitattributes": "* -diff\n"})
+        self.assertEqual(diffs["pr.raw.diff"]["a.py"], {1, 2, 3})
+        self.assertEqual(diffs["interdiff.raw.diff"]["a.py"], {1, 2, 3})
+
+    def test_binary_file_is_not_fatal(self):
+        # git's own binary detection still applies; only the PR's
+        # .gitattributes are ignored, so `* -diff` cannot hide a text file.
+        (self.repo / "logo.png").write_bytes(b"\x89PNG\xff\xfe\x00\n" * 50)
+        diffs = self._prepare({"a.py": "1\n2\n3\n", ".gitattributes": "* -diff\n"})
+        self.assertEqual(diffs["pr.raw.diff"]["a.py"], {1, 2, 3})
+        self.assertNotIn("logo.png", diffs["pr.raw.diff"])
+        pr_diff = (Path(self.tmp.name) / "ctx" / "pr.raw.diff").read_text(encoding="utf-8")
+        self.assertIn("Binary files /dev/null and b/logo.png differ", pr_diff)
+
+    def test_lone_carriage_return_does_not_split_a_line(self):
+        head = _commit(self.repo, {"cr.py": "1\n2\r 3\n4\n"})
+        diff = review.git_diff(str(self.repo), f"{self.base}..{head}")
+        self.assertIn("+2\r 3\n", diff)
+        self.assertEqual(review.diff_lines(diff)["RIGHT"]["cr.py"], {1, 2, 3})
+
+    def test_unusual_paths_reach_the_interdiff(self):
+        diffs = self._prepare({"sp ace.py": "x\n", "café.py": "x\n"})
+        self.assertEqual((diffs["interdiff.raw.diff"]["sp ace.py"], diffs["interdiff.raw.diff"]["café.py"]), ({1}, {1}))
+
+    @skipIf(os.name == "nt", "Windows file names cannot contain ':' or '*'")
+    def test_file_name_is_not_a_pathspec(self):
+        diffs = self._prepare({"a.py": "1\n2\n3\n", ":(exclude)*": "x\n"})
+        self.assertEqual(diffs["interdiff.raw.diff"]["a.py"], {1, 2, 3})
+
+
+class CommitLogTest(TestCase):
+    def test_lists_the_pr_commits_oldest_first(self):
+        import subprocess
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as repo:
+            def run(*args):
+                return subprocess.run(["git", "-C", repo, *args], check=True, capture_output=True, text=True).stdout.strip()
+
+            run("init", "-q")
+            run("config", "commit.gpgsign", "false")
+            run("-c", "user.name=t", "-c", "user.email=t@e", "commit", "-q", "--allow-empty", "-m", "base")
+            base = run("rev-parse", "HEAD")
+            for msg in ("feat: one\n\nWhy one.", "fix: two"):
+                run("-c", "user.name=t", "-c", "user.email=t@e", "commit", "-q", "--allow-empty", "-m", msg)
+            log = review.commit_log(repo, base, run("rev-parse", "HEAD"))
+        self.assertNotIn("base", log)
+        self.assertLess(log.index("feat: one"), log.index("fix: two"))
+        self.assertIn("Why one.", log)
+
+
 class PostTest(TestCase):
     """post() end to end against a fake GitHub."""
 
@@ -366,7 +673,7 @@ class PostTest(TestCase):
 
         self.tmp = tempfile.TemporaryDirectory()
         self.ctx = Path(self.tmp.name)
-        (self.ctx / "pr.diff").write_text(DIFF, encoding="utf-8")
+        (self.ctx / "pr.raw.diff").write_text(DIFF, encoding="utf-8", newline="")
         (self.ctx / "prior-review-state.json").write_text(json.dumps({"suppress": []}), encoding="utf-8")
         self.env = review.Env(
             repo="o/r", pr=1, head_sha=SHA_A, base_sha=SHA_B, checkout="pr-head", context_dir=self.ctx, run_url="u",
@@ -374,27 +681,43 @@ class PostTest(TestCase):
         self.live = []  # thread nodes on the PR
         self.calls = []
         self.fail_posts = set()  # paths whose comments GitHub rejects
+        self.fail_bodies = set()  # comments GitHub rejects when the body contains one of these
         self.summary_body = None
+        self.replied = []  # comment ids replied to
+        self.pr_head = SHA_A
+        self.status = None
 
         def fake_gh(*args, input_json=None, check=True):
             self.calls.append((args, input_json))
             path = args[0]
             if path == "graphql":
                 if "resolveReviewThread" in args[2]:
+                    thread_id = args[4].removeprefix("id=")
+                    next(n for n in self.live if n["id"] == thread_id)["isResolved"] = True
                     return {}
                 return {"data": {"repository": {"pullRequest": {"reviewThreads": {
                     "pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": list(self.live)}}}}}
             if path.endswith("/reviews"):
-                if any(c["path"] in self.fail_posts for c in input_json["comments"]):
+                if any(self._rejects(c) for c in input_json["comments"]):
                     return None
                 for c in input_json["comments"]:
                     self._land(c)
                 return {}
+            if path.endswith("/replies"):
+                comment_id = int(path.split("/")[-2])
+                self.replied.append(comment_id)
+                node = next(n for n in self.live if n["comments"]["nodes"][0]["databaseId"] == comment_id)
+                node["comments"]["nodes"].append(
+                    {"databaseId": 1000 + len(self.replied), "body": args[2].removeprefix("body="),
+                     "author": {"login": "github-actions"}})
+                return {}
             if path.endswith("/pulls/1/comments"):
-                if input_json["path"] in self.fail_posts:
+                if self._rejects(input_json):
                     return None
                 self._land(input_json)
                 return {}
+            if path == "repos/o/r/pulls/1":
+                return {"head": {"sha": self.pr_head}}
             if path == "--paginate":
                 prior = f"<!-- claude-review-summary reviewed={SHA_B} -->"
                 return [[{"id": 5, "user": {"login": "github-actions[bot]"}, "body": prior}]]
@@ -413,6 +736,9 @@ class PostTest(TestCase):
         review.gh = self._orig
         self.tmp.cleanup()
 
+    def _rejects(self, comment):
+        return comment["path"] in self.fail_posts or any(b in comment["body"] for b in self.fail_bodies)
+
     def _land(self, comment):
         self.live.append({
             "id": f"T{len(self.live)}", "isResolved": False, "isOutdated": False,
@@ -420,8 +746,9 @@ class PostTest(TestCase):
             "comments": {"nodes": [{"databaseId": len(self.live), "body": comment["body"], "author": {"login": "github-actions"}}]},
         })
 
-    def _post(self, findings):
-        review.post(self.env, agent_ok=True, agent_output=json.dumps({"findings": findings, "resolutions": []}),
+    def _post(self, findings, resolutions=()):
+        review.post(self.env, agent_ok=True,
+                    agent_output=json.dumps({"findings": findings, "resolutions": list(resolutions)}),
                     mode="full", prior_sha=None)
 
     def _posted_paths(self):
@@ -458,6 +785,66 @@ class PostTest(TestCase):
         self._post(findings)  # same artifact, prepare-time suppress list is stale
         self.assertEqual(self._posted_paths(), ["src/app.py", "new.py"])
         self.assertIn(f"reviewed={SHA_A}", self.summary_body)
+
+    def test_rerun_after_partial_post_keeps_a_suffixed_finding(self):
+        findings = [_finding(), _finding(body="Second bug on the same symbol.")]
+        self.fail_bodies = {"Second bug"}
+        self._post(findings)
+        self.fail_bodies = set()
+        self._post(findings)
+        fps = [review.parse_fp_marker(n["comments"]["nodes"][0]["body"])[0] for n in self.live]
+        self.assertEqual(fps, ["src/app.py::correctness::new", "src/app.py::correctness::new-2"])
+        self.assertIn(f"reviewed={SHA_A}", self.summary_body)
+
+    def test_pr_diff_is_read_back_without_splitting_on_carriage_returns(self):
+        diff = "diff --git a/cr.py b/cr.py\nnew file mode 100644\n--- /dev/null\n+++ b/cr.py\n@@ -0,0 +1,2 @@\n+a\r b\n+c\n"
+        (self.ctx / "pr.raw.diff").write_bytes(diff.encode("utf-8"))
+        self._post([_finding(path="cr.py", line=3)])  # past the end: snaps to line 2
+        self.assertEqual([n["line"] for n in self.live], [2])
+
+    def test_stale_rerun_does_not_touch_the_pr(self):
+        self.pr_head = "c" * 40  # pushed since this run's review job
+        self._post([_finding()])
+        self.assertEqual((self.live, self.summary_body, self.status), ([], None, None))
+
+    def test_reraised_outdated_thread_is_superseded(self):
+        old = _thread("src/app.py::correctness::new", outdated=True)
+        old["comments"]["nodes"][0]["databaseId"] = 100
+        self.live.append(old)
+        self._post([_finding()])  # re-anchored on the current code
+        self.assertTrue(old["isResolved"])
+        self.assertIn(review.SUPERSEDED_MARKER, old["comments"]["nodes"][-1]["body"])
+        self.assertEqual(self.status["description"], "Open: 0 blocking, 1 should-fix, 0 nit")
+        self.replied = []
+        self._post([], resolutions=[{"fp": "src/app.py::correctness::new", "reason": "Fixed."}])
+        self.assertEqual(self.replied, [self.live[1]["comments"]["nodes"][0]["databaseId"]])
+
+    def test_reraise_of_a_suffixed_sibling_supersedes_neither(self):
+        olds = [_thread("src/app.py::correctness::new", outdated=True),
+                _thread("src/app.py::correctness::new-2", outdated=True)]
+        for i, node in enumerate(olds):
+            node["comments"]["nodes"][0]["databaseId"] = 100 + i
+        self.live.extend(olds)
+        # Only the second issue is re-raised; this run names it without a suffix.
+        self._post([_finding(body="The second issue again.")])
+        self.assertEqual([n["isResolved"] for n in self.live], [False, False, False])
+        self.assertEqual(self.replied, [])
+
+    def test_resolution_never_closes_a_thread_posted_in_the_same_run(self):
+        old = _thread("src/app.py::correctness::new", outdated=True)
+        old["comments"]["nodes"][0]["databaseId"] = 100
+        self.live.append(old)
+        # The agent judges the old issue fixed, and raises a different one on
+        # the same symbol, which is not suppressed since the old one is outdated.
+        self._post([_finding(body="A different bug.")],
+                   resolutions=[{"fp": "src/app.py::correctness::new", "reason": "Fixed."}])
+        new = self.live[1]
+        self.assertFalse(new["isResolved"])
+        self.assertEqual(len(new["comments"]["nodes"]), 1)
+        self.assertTrue(old["isResolved"])
+        self.assertEqual([c["body"] for c in old["comments"]["nodes"][1:]],
+                         [f"Addressed: Fixed.\n\n{review.ADDRESSED_MARKER}"])
+        self.assertEqual(self.status["description"], "Open: 0 blocking, 1 should-fix, 0 nit")
 
 
 if __name__ == "__main__":
