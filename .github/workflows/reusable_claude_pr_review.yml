@@ -234,7 +234,7 @@ jobs:
       # repo root is left untouched. The agent reads pr-head/ but never runs it.
       - name: Checkout PR head (read-only)
         if: steps.meta.outputs.resolved == 'true'
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.0
         with:
           repository: ${{ inputs.head_repository }}
           ref: ${{ steps.meta.outputs.head_sha }}
@@ -257,7 +257,7 @@ jobs:
       # persist-credentials is false so no token is left on disk.
       - name: Check out workflow tooling (requirements, review script)
         if: steps.meta.outputs.resolved == 'true'
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.0
         with:
           repository: ${{ inputs.tooling_repository }}
           ref: ${{ inputs.tooling_ref }}
@@ -518,7 +518,7 @@ jobs:
           path: review-context
 
       - name: Check out workflow tooling (review script)
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.0
         with:
           repository: ${{ inputs.tooling_repository }}
           ref: ${{ inputs.tooling_ref }}
