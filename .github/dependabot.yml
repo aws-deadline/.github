@@ -3,15 +3,27 @@
 # reusable_claude_pr_review.yml. A human reviews the bump here once and every
 # consuming repo picks it up via its @mainline reference, so no per-consumer
 # Dependabot config is needed.
+#
+# Each ecosystem's bumps are grouped into a single weekly PR, so the actions
+# pinned across these workflows are reviewed and merged together rather than
+# as a separate PR per action.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
   # Watches claude-review-requirements.txt so the version-pinned
   # aws-bedrock-token-generator gets reviewed bump PRs instead of going stale.
   - package-ecosystem: "pip"
     directory: "/.github/workflows"
     schedule:
       interval: "weekly"
+    groups:
+      pip:
+        patterns:
+          - "*"
