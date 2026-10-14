@@ -242,6 +242,9 @@ jobs:
           persist-credentials: false
           submodules: false
           fetch-depth: 0
+          # checkout v7 refuses fork code under workflow_run without this opt-in.
+          # Safe here: the code is only read, never run, and no token persists.
+          allow-unsafe-pr-checkout: true
 
       # Remove any symlinks from the checkout so the agent's read tools can only
       # see files inside pr-head/.
