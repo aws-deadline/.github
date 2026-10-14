@@ -343,7 +343,7 @@ jobs:
         id: agent
         if: steps.meta.outputs.resolved == 'true'
         timeout-minutes: ${{ inputs.review_timeout_minutes }}
-        uses: anthropics/claude-code-action@58985842b834ed26087302ba27d07bc24ca8697a # v1.0.244
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         env:
           AWS_BEARER_TOKEN_BEDROCK: ${{ env.AWS_BEARER_TOKEN_BEDROCK }}
           AWS_REGION: ${{ inputs.aws_region }}
