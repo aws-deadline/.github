@@ -81,9 +81,17 @@ jobs:
         # mypy fail with "command not found".
         key: hatch-env-${{ inputs.os }}-py${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('pyproject.toml', 'hatch.toml', 'requirements*.txt') }}
 
+    # pip 26.2.2 requires Python 3.10+, but this workflow still tests Python 3.9.
+    # Use the patched uv release for both the initial install and Hatch environments.
+    - name: Set up uv 0.13.4
+      uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      with:
+        version: "0.13.4"
+
     - name: Install Hatch
       run: |
-        pip install --upgrade hatch 'virtualenv<21; python_version < "3.10"'
+        uv pip install --system --upgrade hatch 'virtualenv<21; python_version < "3.10"'
+        python -c "import os, shutil; open(os.environ['GITHUB_ENV'], 'a').write(f'HATCH_ENV_TYPE_VIRTUAL_UV_PATH={shutil.which(\"uv\")}\n')"
 
     - name: Run Linting
       run: hatch -v run lint
