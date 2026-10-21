@@ -89,6 +89,7 @@ jobs:
         version: "0.13.4"
 
     - name: Install Hatch
+      shell: bash
       run: |
         uv pip install --system --upgrade hatch 'virtualenv<21; python_version < "3.10"'
         python -c "import os, shutil; open(os.environ['GITHUB_ENV'], 'a').write(f'HATCH_ENV_TYPE_VIRTUAL_UV_PATH={shutil.which(\"uv\")}\n')"
