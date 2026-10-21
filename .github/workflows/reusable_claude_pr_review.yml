@@ -79,6 +79,11 @@ on:
         required: false
         type: string
         default: "mainline"
+      review_guide_path:
+        description: "Optional path, in the calling repo, of a review guide (e.g. REVIEW.md) the agent reads before reviewing: which areas carry the most risk and what not to flag. Read from the commit this workflow runs on (the caller's default branch under workflow_run), never from the PR, so a PR cannot rewrite the guidance it is reviewed with. Empty (the default) means no guide."
+        required: false
+        type: string
+        default: ""
     secrets:
       bedrock_role_arn:
         description: "ARN of the OIDC role that can mint a Bedrock bearer token. Kept in a secret so the account id is configured in one place."
@@ -291,6 +296,55 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: python3 workflow-tooling/.github/scripts/claude_pr_review.py prepare
 
+      # Opt-in: stage the caller's review guide for the agent. It is checked
+      # out from github.sha -- under workflow_run, the caller's default-branch
+      # commit -- not from the PR, and lives outside pr-head/ and
+      # review-context/ because, unlike those, it is trusted.
+      - name: Check out review guide
+        if: steps.meta.outputs.resolved == 'true' && inputs.review_guide_path != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.sha }}
+          path: review-guide-src
+          persist-credentials: false
+          submodules: false
+          sparse-checkout: ${{ inputs.review_guide_path }}
+          sparse-checkout-cone-mode: false
+
+      - name: Stage review guide
+        id: guide
+        if: steps.meta.outputs.resolved == 'true' && inputs.review_guide_path != ''
+        env:
+          GUIDE_PATH: ${{ inputs.review_guide_path }}
+          GUIDE_SHA: ${{ github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          # The guide is trusted only because github.sha is the default branch,
+          # which holds under workflow_run but not for other triggers.
+          if [[ -z "$DEFAULT_BRANCH" || "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ]]; then
+            echo "::warning::Not running from the default branch ($GITHUB_REF); reviewing without the guide."
+            exit 0
+          fi
+          [[ "$GUIDE_PATH" =~ ^[A-Za-z0-9._/-]+$ && "$GUIDE_PATH" != *..* ]] || { echo "::error::bad review_guide_path"; exit 1; }
+          src="review-guide-src/$GUIDE_PATH"
+          if [[ ! -f "$src" || -L "$src" ]]; then
+            echo "::warning::Review guide $GUIDE_PATH not found on $GUIDE_SHA; reviewing without it."
+            exit 0
+          fi
+          mkdir review-guide
+          cp "$src" review-guide/REVIEW.md
+          {
+            echo 'prompt<<EOF_GUIDE'
+            echo '`review-guide/REVIEW.md` is this repository'"'"'s review guidance from'
+            echo 'its maintainers, taken from the default branch. Unlike the inputs'
+            echo 'above it is trusted. Read it before reviewing: it says which areas'
+            echo 'carry the most risk, what failure looks like in each, and what not'
+            echo 'to flag.'
+            echo 'EOF_GUIDE'
+          } >> "$GITHUB_OUTPUT"
+
       # Install the token generator BEFORE any AWS credentials exist in the
       # environment. Even though the package is version-pinned (see
       # claude-review-requirements.txt), running its install with no IAM session
@@ -396,6 +450,8 @@ jobs:
               replies: [ { author, body } ] } ] }` -- your earlier findings.
             Read prior-review-state.json FIRST.
 
+            ${{ steps.guide.outputs.prompt }}
+
             ── WHAT TO REVIEW ──
             Full mode: this is the only full pass this PR gets -- later
             revisions are reviewed incrementally -- so be thorough. Cover every
@@ -472,7 +528,7 @@ jobs:
           claude_args: |
             --model ${{ inputs.model_id }}
             --json-schema '{"type":"object","additionalProperties":false,"required":["findings","resolutions"],"properties":{"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["path","line","severity","category","symbol","body"],"properties":{"path":{"type":"string"},"line":{"type":"integer"},"severity":{"type":"string","enum":["blocking","should-fix","nit"]},"category":{"type":"string"},"symbol":{"type":"string"},"side":{"type":"string","enum":["RIGHT","LEFT"]},"body":{"type":"string"}}}},"resolutions":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["fp","reason"],"properties":{"fp":{"type":"string"},"reason":{"type":"string"}}}}}}'
-            --allowedTools "Read(./pr-head/**),Read(./review-context/**),Glob(./pr-head/**),Glob(./review-context/**),Grep(./pr-head/**),Grep(./review-context/**)"
+            --allowedTools "Read(./pr-head/**),Read(./review-context/**),Read(./review-guide/**),Glob(./pr-head/**),Glob(./review-context/**),Grep(./pr-head/**),Grep(./review-context/**)"
             --disallowedTools "Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch"
 
       # Hand the agent's outcome and structured output to the post job,
