@@ -101,9 +101,15 @@ jobs:
             
           git push origin $TAG
 
+      - name: Set up uv 0.13.4
+        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          version: "0.13.4"
+
       - name: Build
         run: |
-          pip install --upgrade hatch 'virtualenv<21; python_version < "3.10"'
+          uv pip install --system --upgrade hatch 'virtualenv<21; python_version < "3.10"'
+          python -c "import os, shutil; open(os.environ['GITHUB_ENV'], 'a').write(f'HATCH_ENV_TYPE_VIRTUAL_UV_PATH={shutil.which(\"uv\")}\n')"
           hatch -v build
 
       # A precommit hook into the GitHub Action workflow.
@@ -309,10 +315,15 @@ jobs:
         with:
           python-version: '3.9'
 
+      - name: Set up uv 0.13.4
+        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          version: "0.13.4"
+
       - name: Install dependencies
         run: |
-          pip install --upgrade hatch 'virtualenv<21; python_version < "3.10"'
-          pip install --upgrade twine
+          uv pip install --system --upgrade hatch twine 'virtualenv<21; python_version < "3.10"'
+          python -c "import os, shutil; open(os.environ['GITHUB_ENV'], 'a').write(f'HATCH_ENV_TYPE_VIRTUAL_UV_PATH={shutil.which(\"uv\")}\n')"
 
       - name: Download
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
