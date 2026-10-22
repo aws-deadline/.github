@@ -20,17 +20,23 @@ OLD_SHA = "b" * 40
 
 CONFIG = policy.Config.parse(
     """
-high_risk_paths = [".github/", "pyproject.toml", "requirements*.txt", "src/pkg/_session.py"]
-low_risk_paths = ["docs/", "test/", "**/*.md"]
-low_risk_exclude = ["AGENTS.md", "REVIEW.md"]
-low_risk_max_changed_lines = 300
+auto_paths = ["docs/", "test/", "**/*.md"]
+human_paths = ["pyproject.toml", "requirements*.txt", "src/pkg/_session.py"]
+auto_max_changed_lines = 300
 human_review_authors = ["release-bot"]
 
 [dependabot]
 auto_merge_files = ["requirements-testing.txt", "requirements-ui-testing.txt"]
 human_review_packages = ["PySide6-essentials"]
 trusted_action_owners = ["actions", "aws-actions"]
-"""
+""",
+    path="policy/review.toml",
+)
+
+# A config that lets everything in, to show what it cannot.
+OPEN_CONFIG = policy.Config.parse(
+    'auto_paths = ["**"]\nauto_max_changed_lines = 1000\n[dependabot]\nauto_merge_files = ["**"]',
+    path=".github/review-policy.toml",
 )
 
 PR = policy.PullRequest(
@@ -84,13 +90,14 @@ class GlobTest(TestCase):
 
 class ConfigTest(TestCase):
     def test_unknown_key_is_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "high_risk_path"):
-            policy.Config.parse('high_risk_path = ["x"]')
+        for key in ("auto_path", "high_risk_paths", "path"):
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, key):
+                policy.Config.parse(f'{key} = ["x"]')
 
     def test_wrong_type_is_rejected(self) -> None:
         for text in (
-            'high_risk_paths = ".github/"',
-            'low_risk_max_changed_lines = "300"',
+            'human_paths = "src/"',
+            'auto_max_changed_lines = "300"',
             "[dependabot]\nauto_merge_files = [1]",
         ):
             with self.subTest(text=text), self.assertRaisesRegex(ValueError, "wrong type"):
@@ -102,50 +109,82 @@ class ConfigTest(TestCase):
 
 
 class ClassifyTest(TestCase):
-    def test_docs_from_member_is_low(self) -> None:
-        self.assertEqual(policy.classify(PR, CONFIG).tier, "low")
+    def test_docs_from_member_is_auto(self) -> None:
+        self.assertEqual(policy.classify(PR, CONFIG).tier, "auto")
 
-    def test_external_author_is_not_low(self) -> None:
+    def test_external_author_is_human(self) -> None:
         c = policy.classify(replace(PR, association="CONTRIBUTOR"), CONFIG)
-        self.assertEqual(c.tier, "medium")
+        self.assertEqual(c.tier, "human")
         self.assertIn("CONTRIBUTOR", c.reasons[0])
 
-    def test_source_change_is_medium(self) -> None:
+    def test_source_change_is_human(self) -> None:
         pr = replace(PR, files=(policy.ChangedFile("src/pkg/cli.py", changes=10),))
-        self.assertEqual(policy.classify(pr, CONFIG).tier, "medium")
+        self.assertEqual(policy.classify(pr, CONFIG).tier, "human")
 
-    def test_excluded_low_path_is_medium(self) -> None:
-        pr = replace(PR, files=(policy.ChangedFile("REVIEW.md", changes=1),))
-        self.assertEqual(policy.classify(pr, CONFIG).tier, "medium")
-
-    def test_large_low_path_change_is_medium(self) -> None:
+    def test_large_auto_path_change_is_human(self) -> None:
         pr = replace(PR, files=(policy.ChangedFile("docs/a.md", changes=301),))
-        self.assertEqual(policy.classify(pr, CONFIG).tier, "medium")
+        self.assertEqual(policy.classify(pr, CONFIG).tier, "human")
 
-    def test_no_files_is_medium(self) -> None:
-        self.assertEqual(policy.classify(replace(PR, files=()), CONFIG).tier, "medium")
+    def test_no_files_is_human(self) -> None:
+        self.assertEqual(policy.classify(replace(PR, files=()), CONFIG).tier, "human")
 
-    def test_high_risk_path_is_high(self) -> None:
+    def test_human_path_is_human(self) -> None:
         pr = replace(PR, files=(policy.ChangedFile("docs/a.md"), policy.ChangedFile("src/pkg/_session.py")))
         c = policy.classify(pr, CONFIG)
-        self.assertEqual(c.tier, "high")
+        self.assertEqual(c.tier, "human")
         self.assertIn("src/pkg/_session.py", c.reasons[0])
 
-    def test_rename_out_of_high_risk_path_is_high(self) -> None:
+    def test_rename_out_of_human_path_is_human(self) -> None:
         pr = replace(PR, files=(policy.ChangedFile("docs/session.py", previous_path="src/pkg/_session.py"),))
-        self.assertEqual(policy.classify(pr, CONFIG).tier, "high")
+        self.assertEqual(policy.classify(pr, CONFIG).tier, "human")
 
-    def test_breaking_title_is_high(self) -> None:
+    def test_breaking_title_is_human(self) -> None:
         for title in ("feat!: drop py3.9", "fix(cli)!: rename flag"):
             with self.subTest(title=title):
-                self.assertEqual(policy.classify(replace(PR, title=title), CONFIG).tier, "high")
+                self.assertEqual(policy.classify(replace(PR, title=title), CONFIG).tier, "human")
 
-    def test_security_label_is_high(self) -> None:
-        self.assertEqual(policy.classify(replace(PR, labels=("security",)), CONFIG).tier, "high")
+    def test_security_label_is_human(self) -> None:
+        self.assertEqual(policy.classify(replace(PR, labels=("security",)), CONFIG).tier, "human")
 
-    def test_human_review_author_is_medium_even_for_low_paths(self) -> None:
-        c = policy.classify(replace(PR, author="release-bot"), CONFIG)
-        self.assertEqual(c.tier, "medium")
+    def test_human_review_author_is_human_even_for_auto_paths(self) -> None:
+        self.assertEqual(policy.classify(replace(PR, author="release-bot"), CONFIG).tier, "human")
+
+    def test_always_human_paths_cannot_be_configured_away(self) -> None:
+        # Agent instructions, review guidance, ownership, and CI, wherever they
+        # sit, even when the config makes every path an auto path.
+        for path in (
+            "AGENTS.md",
+            "pkg/AGENTS.md",
+            "CLAUDE.md",
+            "docs/CLAUDE.md",
+            "REVIEW.md",
+            "CODEOWNERS",
+            "docs/CODEOWNERS",
+            ".github/CODEOWNERS",
+            ".github/workflows/ci.yml",
+            ".claude/settings.json",
+            "sub/.claude/agents/x.md",
+            ".github/review-policy.toml",
+        ):
+            with self.subTest(path=path):
+                pr = replace(PR, files=(policy.ChangedFile(path, changes=1),))
+                c = policy.classify(pr, OPEN_CONFIG)
+                self.assertEqual(c.tier, "human")
+                self.assertIn("always needs a human", c.reasons[0])
+
+    def test_config_file_is_always_human_wherever_it_lives(self) -> None:
+        pr = replace(PR, files=(policy.ChangedFile("policy/review.toml", changes=1),))
+        self.assertIn("always needs a human", policy.classify(pr, CONFIG).reasons[0])
+
+    def test_rename_out_of_always_human_path_is_human(self) -> None:
+        pr = replace(PR, files=(policy.ChangedFile("docs/notes.md", previous_path="AGENTS.md"),))
+        self.assertEqual(policy.classify(pr, OPEN_CONFIG).tier, "human")
+
+    def test_lookalikes_are_not_always_human(self) -> None:
+        for path in ("docs/github/x.md", "docs/REVIEW.md.bak", "MY_AGENTS.md", "docs/claude/x.md"):
+            with self.subTest(path=path):
+                pr = replace(PR, files=(policy.ChangedFile(path, changes=1),))
+                self.assertEqual(policy.classify(pr, OPEN_CONFIG).tier, "auto")
 
 
 class DependabotTest(TestCase):
@@ -173,106 +212,120 @@ class DependabotTest(TestCase):
 
     def test_patch_of_test_dependency_is_auto(self) -> None:
         c = policy.classify(dependabot_pr(("requirements-testing.txt",), ("ruff", "1.2.3", "semver-patch")), CONFIG)
-        self.assertEqual((c.tier, c.lane), ("low", "auto"))
+        self.assertEqual(c.tier, "auto")
 
     def test_trusted_action_bump_is_auto(self) -> None:
         pr = dependabot_pr((".github/workflows/ci.yml",), ("actions/checkout", "7.0.1", "semver-minor"))
-        self.assertEqual(policy.classify(pr, CONFIG).lane, "auto")
+        self.assertEqual(policy.classify(pr, CONFIG).tier, "auto")
+        # .github/ is always human, but action bumps are judged by owner.
+        self.assertEqual(policy.classify(pr, replace(OPEN_CONFIG, dependabot=CONFIG.dependabot)).tier, "auto")
 
     def test_untrusted_action_bump_is_human(self) -> None:
         pr = dependabot_pr((".github/workflows/ci.yml",), ("someone/action", "2.1.0", "semver-minor"))
-        self.assertEqual(policy.classify(pr, CONFIG).lane, "human")
+        self.assertEqual(policy.classify(pr, CONFIG).tier, "human")
 
     def test_runtime_manifest_is_human(self) -> None:
         pr = dependabot_pr(("pyproject.toml",), ("boto3", "1.40.1", "semver-patch"))
         c = policy.classify(pr, CONFIG)
-        # pyproject.toml is a high-risk path, so the bump takes its tier.
-        self.assertEqual((c.tier, c.lane), ("high", "human"))
+        self.assertEqual(c.tier, "human")
         self.assertIn("pyproject.toml", c.reasons[0])
+
+    def test_always_human_file_is_human_whatever_auto_merge_files_says(self) -> None:
+        for path in ("CODEOWNERS", ".github/requirements.txt", ".github/review-policy.toml"):
+            with self.subTest(path=path):
+                pr = dependabot_pr((path,), ("ruff", "1.2.3", "semver-patch"))
+                c = policy.classify(pr, OPEN_CONFIG)
+                self.assertEqual(c.tier, "human")
+                self.assertIn("always needs a human", c.reasons[0])
+
+    def test_repo_human_paths_do_not_override_auto_merge_files(self) -> None:
+        # requirements*.txt is a human path for people's PRs; Dependabot's own
+        # rules decide its bumps.
+        pr = dependabot_pr(("requirements-testing.txt",), ("ruff", "1.2.3", "semver-patch"))
+        self.assertEqual(policy.classify(pr, CONFIG).tier, "auto")
 
     def test_major_is_human(self) -> None:
         pr = dependabot_pr(("requirements-testing.txt",), ("pytest", "9.0.0", "semver-major"))
-        self.assertEqual(policy.classify(pr, CONFIG).lane, "human")
+        self.assertEqual(policy.classify(pr, CONFIG).tier, "human")
 
     def test_zero_x_minor_is_human(self) -> None:
         # The xa11y 0.13 -> 0.15 bump (aws-deadline/deadline-cloud#1367) broke the UI tests.
         pr = dependabot_pr(("requirements-ui-testing.txt",), ("xa11y", "0.15.0", "semver-minor"))
         c = policy.classify(pr, CONFIG)
-        self.assertEqual(c.lane, "human")
+        self.assertEqual(c.tier, "human")
         self.assertIn("0.x minor", c.reasons[0])
 
     def test_zero_x_patch_is_auto(self) -> None:
         pr = dependabot_pr(("requirements-ui-testing.txt",), ("xa11y", "0.15.2", "semver-patch"))
-        self.assertEqual(policy.classify(pr, CONFIG).lane, "auto")
+        self.assertEqual(policy.classify(pr, CONFIG).tier, "auto")
 
     def test_human_review_package_is_human(self) -> None:
         pr = dependabot_pr(("requirements-ui-testing.txt",), ("PySide6-essentials", "6.10.1", "semver-patch"))
-        self.assertEqual(policy.classify(pr, CONFIG).lane, "human")
+        self.assertEqual(policy.classify(pr, CONFIG).tier, "human")
 
     def test_one_human_dependency_makes_the_group_human(self) -> None:
         pr = dependabot_pr(
             ("requirements-testing.txt",), ("ruff", "1.2.3", "semver-patch"), ("pytest", "9.0.0", "semver-major")
         )
-        self.assertEqual(policy.classify(pr, CONFIG).lane, "human")
+        self.assertEqual(policy.classify(pr, CONFIG).tier, "human")
 
     def test_missing_metadata_is_human(self) -> None:
         pr = dependabot_pr(("requirements-testing.txt",))
         pr = replace(pr, commits=(policy.Commit("dependabot[bot]", "bump", github_signed=True),))
-        self.assertEqual(policy.classify(pr, CONFIG).lane, "human")
+        self.assertEqual(policy.classify(pr, CONFIG).tier, "human")
 
     def test_merge_by_someone_else_is_human(self) -> None:
         # A merge can carry arbitrary changes, e.g. "Update branch" in
         # aws-deadline/deadline-cloud#1400.
         pr = dependabot_pr(("requirements-testing.txt",), ("ruff", "1.2.3", "semver-patch"))
         pr = replace(pr, commits=pr.commits + (policy.Commit("larrygao001", "Merge branch 'mainline'"),))
-        self.assertEqual(policy.classify(pr, CONFIG).lane, "human")
+        self.assertEqual(policy.classify(pr, CONFIG).tier, "human")
 
-    def test_security_label_is_high(self) -> None:
+    def test_security_label_is_human(self) -> None:
         pr = dependabot_pr(("requirements-testing.txt",), ("ruff", "1.2.3", "semver-patch"))
-        c = policy.classify(replace(pr, labels=("security",)), CONFIG)
-        self.assertEqual((c.tier, c.lane), ("high", "human"))
+        self.assertEqual(policy.classify(replace(pr, labels=("security",)), CONFIG).tier, "human")
 
     def test_commit_by_someone_else_is_human(self) -> None:
         # Like the xa11y fix-up commits in aws-deadline/deadline-cloud#1367.
         pr = dependabot_pr(("requirements-ui-testing.txt",), ("xa11y", "0.15.2", "semver-patch"))
         pr = replace(pr, commits=pr.commits + (policy.Commit("crowecawcaw", "test(ui): retry tree dump"),))
         c = policy.classify(pr, CONFIG)
-        self.assertEqual(c.lane, "human")
+        self.assertEqual(c.tier, "human")
         self.assertIn("crowecawcaw", c.reasons[0])
 
     def test_requirement_update_type_is_inferred_from_the_title(self) -> None:
         # aws-deadline/deadline-cloud#1387 carries no update-type.
-        for title, version, lane in (
+        for title, version, tier in (
             ("chore(deps): update mypy requirement from ==2.3.* to ==2.4.*", "2.4.0", "auto"),
             ("chore(deps): update mypy requirement from ==2.3.* to ==3.0.*", "3.0.0", "human"),
             ("chore(deps): update ruff requirement from ==0.16.* to ==0.17.*", "0.17.0", "human"),
         ):
             with self.subTest(title=title):
                 pr = dependabot_pr(("requirements-testing.txt",), ("mypy", version, ""), subject=title)
-                self.assertEqual(policy.classify(pr, CONFIG).lane, lane)
+                self.assertEqual(policy.classify(pr, CONFIG).tier, tier)
 
     def test_edited_title_or_mismatched_version_is_not_trusted(self) -> None:
         subject = "chore(deps): update mypy requirement from ==2.* to ==3.*"
         pr = dependabot_pr(("requirements-testing.txt",), ("mypy", "3.0.0", ""), subject=subject)
         edited = replace(pr, title="chore(deps): update mypy requirement from ==2.3.* to ==2.4.*")
-        self.assertEqual(policy.classify(edited, CONFIG).lane, "human")
+        self.assertEqual(policy.classify(edited, CONFIG).tier, "human")
         mismatched = dependabot_pr(
             ("requirements-testing.txt",),
             ("mypy", "3.0.0", ""),
             subject="update mypy requirement from ==2.3.* to ==2.4.*",
         )
-        self.assertEqual(policy.classify(mismatched, CONFIG).lane, "human")
+        self.assertEqual(policy.classify(mismatched, CONFIG).tier, "human")
 
     def test_unsigned_dependabot_commit_is_human(self) -> None:
         # The author login comes from the author email, which anyone can set.
         pr = dependabot_pr(("requirements-testing.txt",), ("ruff", "1.2.3", "semver-patch"))
         pr = replace(pr, commits=(replace(pr.commits[0], github_signed=False),))
-        self.assertEqual(policy.classify(pr, CONFIG).lane, "human")
+        self.assertEqual(policy.classify(pr, CONFIG).tier, "human")
 
-    def test_truncated_file_list_is_high(self) -> None:
+    def test_truncated_file_list_is_human(self) -> None:
         pr = dependabot_pr(("requirements-testing.txt",), ("ruff", "1.2.3", "semver-patch"))
-        self.assertEqual(policy.classify(replace(pr, files_truncated=True), CONFIG).tier, "high")
-        self.assertEqual(policy.classify(replace(PR, files_truncated=True), CONFIG).tier, "high")
+        self.assertEqual(policy.classify(replace(pr, files_truncated=True), CONFIG).tier, "human")
+        self.assertEqual(policy.classify(replace(PR, files_truncated=True), CONFIG).tier, "human")
 
     def test_infer_update_type(self) -> None:
         cases = [
@@ -296,23 +349,56 @@ def review(user: str, state: str, commit: str = SHA, bot: bool = False, associat
 
 
 class DecideTest(TestCase):
-    MEDIUM = policy.Classification("medium", ("x",))
-    HIGH = policy.Classification("high", ("x",))
-    LOW = policy.Classification("low", ("x",))
+    AUTO = policy.Classification("auto", ("x",))
+    HUMAN = policy.Classification("human", ("x",))
+    APPROVED = [review("bob", "APPROVED")]
 
-    def test_low_needs_clean_ai_review(self) -> None:
-        self.assertEqual(policy.decide(PR, self.LOW, [], "success")[0], True)
-        self.assertEqual(policy.decide(PR, self.LOW, [], None), (False, "Low risk: waiting for the Claude review"))
-        self.assertEqual(policy.decide(PR, self.LOW, [], "failure")[0], False)
-        self.assertIn("did not finish", policy.decide(PR, self.LOW, [], "error")[1])
+    def test_auto_needs_clean_ai_review(self) -> None:
+        self.assertEqual(
+            policy.decide(PR, self.AUTO, [], "success"),
+            (True, "Auto tier: Claude review is clean, no human approval needed"),
+        )
+        self.assertEqual(policy.decide(PR, self.AUTO, [], None), (False, "Auto tier: waiting for the Claude review"))
+        self.assertEqual(policy.decide(PR, self.AUTO, [], "failure")[0], False)
+        self.assertIn("did not finish, re-run it", policy.decide(PR, self.AUTO, [], "error")[1])
 
-    def test_low_dependabot_needs_no_ai_review(self) -> None:
+    def test_auto_dependabot_needs_no_ai_review(self) -> None:
         pr = replace(PR, author="dependabot[bot]")
-        self.assertEqual(policy.decide(pr, self.LOW, [], None)[0], True)
+        self.assertEqual(policy.decide(pr, self.AUTO, [], None), (True, "Auto tier: no human approval needed"))
 
-    def test_medium_needs_an_approval_on_the_head(self) -> None:
-        self.assertEqual(policy.decide(PR, self.MEDIUM, [], "success"), (False, "Medium risk: needs 1 human approval"))
-        self.assertEqual(policy.decide(PR, self.MEDIUM, [review("bob", "APPROVED")], None)[0], True)
+    def test_human_needs_an_approval_on_the_head_and_a_clean_ai_review(self) -> None:
+        self.assertEqual(policy.decide(PR, self.HUMAN, [], "success"), (False, "Human tier: needs 1 human approval"))
+        self.assertEqual(policy.decide(PR, self.HUMAN, self.APPROVED, "success"), (True, "Human tier: approved by bob"))
+
+    def test_human_approval_alone_is_not_enough(self) -> None:
+        for state, reason in (
+            (None, "waiting for the Claude review"),
+            ("pending", "waiting for the Claude review"),
+            ("error", "Claude review did not finish, re-run it"),
+            ("failure", "Claude review has open findings"),
+        ):
+            with self.subTest(state=state):
+                self.assertEqual(policy.decide(PR, self.HUMAN, self.APPROVED, state), (False, f"Human tier: {reason}"))
+        self.assertEqual(
+            policy.decide(PR, self.HUMAN, [], None),
+            (False, "Human tier: needs 1 human approval; waiting for the Claude review"),
+        )
+
+    def test_human_tier_without_an_ai_review_needs_only_the_approval(self) -> None:
+        # The Claude review does not run for bots or for non-members.
+        for pr in (
+            replace(PR, author="dependabot[bot]"),
+            replace(PR, author="release[bot]"),
+            replace(PR, association="CONTRIBUTOR"),
+        ):
+            with self.subTest(author=pr.author, association=pr.association):
+                self.assertEqual(policy.decide(pr, self.HUMAN, self.APPROVED, None)[0], True)
+                self.assertEqual(policy.decide(pr, self.HUMAN, [], None), (False, "Human tier: needs 1 human approval"))
+
+    def test_auto_tier_never_skips_the_ai_review_for_people(self) -> None:
+        # Only Dependabot's bumps merge on CI alone.
+        pr = replace(PR, association="CONTRIBUTOR")
+        self.assertEqual(policy.decide(pr, self.AUTO, [], None)[0], False)
 
     def test_stale_bot_and_self_approvals_do_not_count(self) -> None:
         reviews = [
@@ -321,38 +407,41 @@ class DecideTest(TestCase):
             review("alice", "APPROVED"),
             review("mallory", "APPROVED", association="NONE"),
         ]
-        self.assertEqual(policy.decide(PR, self.MEDIUM, reviews, None)[0], False)
+        self.assertEqual(policy.decide(PR, self.HUMAN, reviews, "success")[0], False)
 
     def test_committer_cannot_approve_their_own_changes(self) -> None:
         pr = replace(PR, commits=(policy.Commit("bob", "fix-up"),))
-        self.assertEqual(policy.decide(pr, self.MEDIUM, [review("bob", "APPROVED")], None)[0], False)
+        self.assertEqual(policy.decide(pr, self.HUMAN, self.APPROVED, "success")[0], False)
 
     def test_changes_requested_by_another_reviewer_blocks(self) -> None:
         reviews = [review("bob", "APPROVED"), review("carol", "CHANGES_REQUESTED")]
-        for tier in (self.LOW, self.MEDIUM):
+        for tier in (self.AUTO, self.HUMAN):
             with self.subTest(tier=tier.tier):
                 met, reason = policy.decide(PR, tier, reviews, "success")
                 self.assertEqual((met, reason.split(": ")[1]), (False, "changes requested by carol"))
 
     def test_later_changes_requested_overrides_approval(self) -> None:
         reviews = [review("bob", "APPROVED"), review("bob", "CHANGES_REQUESTED")]
-        self.assertEqual(policy.decide(PR, self.MEDIUM, reviews, None)[0], False)
+        self.assertEqual(policy.decide(PR, self.HUMAN, reviews, "success")[0], False)
 
     def test_later_comment_keeps_approval(self) -> None:
         reviews = [review("bob", "APPROVED"), review("bob", "COMMENTED")]
-        self.assertEqual(policy.decide(PR, self.MEDIUM, reviews, None)[0], True)
+        self.assertEqual(policy.decide(PR, self.HUMAN, reviews, "success")[0], True)
 
-    def test_high_names_the_code_owner(self) -> None:
-        self.assertEqual(
-            policy.decide(PR, self.HIGH, [], None), (False, "High risk: needs 1 human approval (code owner)")
-        )
+    def test_descriptions_fit_a_commit_status(self) -> None:
+        # status_for truncates, but every fixed message should fit untruncated.
+        for tier in (self.AUTO, self.HUMAN):
+            for state in (None, "pending", "error", "failure", "success"):
+                with self.subTest(tier=tier.tier, state=state):
+                    _, reason = policy.decide(PR, tier, [], state)
+                    self.assertLessEqual(len(policy.status_for(False, reason, enforce=False)[1]), 139)
 
 
 class StatusTest(TestCase):
     def test_advisory_always_succeeds(self) -> None:
         self.assertEqual(
-            policy.status_for(False, "Medium risk: needs 1 human approval", enforce=False),
-            ("success", "Advisory, would wait: Medium risk: needs 1 human approval"),
+            policy.status_for(False, "Human tier: needs 1 human approval", enforce=False),
+            ("success", "Advisory, would wait: Human tier: needs 1 human approval"),
         )
 
     def test_enforce_is_pending_until_met(self) -> None:
@@ -383,22 +472,22 @@ class EvaluateTest(TestCase):
         return calls, merge
 
     def test_labels_and_sets_status(self) -> None:
-        pr = replace(PR, labels=("risk:high",))
+        pr = replace(PR, labels=("risk:human",))
         calls, _ = self.run_evaluate(pr, enforce=False, auto_merge=False)
-        self.assertIn(("-X", "DELETE", "repos/o/r/issues/7/labels/risk:high"), calls)
+        self.assertIn(("-X", "DELETE", "repos/o/r/issues/7/labels/risk:human"), calls)
         self.assertIn(("-X", "POST", "repos/o/r/issues/7/labels"), calls)
         status = next(c for c in calls if c[2] == f"repos/o/r/statuses/{SHA}")
         self.assertIn("state=success", status)
-        self.assertIn("description=Advisory, would wait: Low risk: waiting for the Claude review", status)
+        self.assertIn("description=Advisory, would wait: Auto tier: waiting for the Claude review", status)
 
     def test_unchanged_status_is_not_reposted(self) -> None:
-        current = {"review-policy": ("success", "Advisory, would wait: Low risk: waiting for the Claude review")}
+        current = {"review-policy": ("success", "Advisory, would wait: Auto tier: waiting for the Claude review")}
         calls, _ = self.run_evaluate(PR, enforce=False, auto_merge=False, statuses=current)
         self.assertFalse([c for c in calls if "statuses" in c[2]])
 
     def test_status_posted_meanwhile_by_another_run_stands(self) -> None:
         seen = ({}, {})
-        meanwhile = ({}, {"review-policy": ("pending", "Medium risk: changes requested by carol")})
+        meanwhile = ({}, {"review-policy": ("pending", "Human tier: changes requested by carol")})
         calls: list[tuple[str, ...]] = []
         with (
             mock.patch.object(policy, "fetch_pr", return_value=PR),
@@ -411,7 +500,7 @@ class EvaluateTest(TestCase):
         self.assertFalse([c for c in calls if "statuses" in c[2]])
 
     def test_existing_label_is_left_alone(self) -> None:
-        calls, _ = self.run_evaluate(replace(PR, labels=("risk:low",)), enforce=False, auto_merge=False)
+        calls, _ = self.run_evaluate(replace(PR, labels=("risk:auto",)), enforce=False, auto_merge=False)
         self.assertFalse([c for c in calls if "labels" in c[2]])
 
     def test_superseded_head_does_nothing(self) -> None:
@@ -426,12 +515,12 @@ class EvaluateTest(TestCase):
                 _, merge = self.run_evaluate(pr, enforce=enforce, auto_merge=allowed)
                 self.assertEqual(merge.call_args_list == [mock.call("o/r", 7, enable=True, head_sha=SHA)], expected)
 
-    def test_human_lane_is_never_auto_merged(self) -> None:
+    def test_human_tier_is_never_auto_merged(self) -> None:
         pr = dependabot_pr(("requirements-ui-testing.txt",), ("xa11y", "0.15.0", "semver-minor"))
         _, merge = self.run_evaluate(pr, enforce=True, auto_merge=True)
         merge.assert_not_called()
 
-    def test_auto_merge_is_disabled_when_leaving_the_auto_lane(self) -> None:
+    def test_auto_merge_is_disabled_when_leaving_the_auto_tier(self) -> None:
         pr = dependabot_pr(("requirements-ui-testing.txt",), ("xa11y", "0.15.0", "semver-minor"))
         _, merge = self.run_evaluate(replace(pr, auto_merge_by="github-actions[bot]"), enforce=True, auto_merge=True)
         merge.assert_called_once_with("o/r", 7, enable=False)

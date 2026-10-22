@@ -2,25 +2,37 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 """Risk-tiered review policy (reusable_review_policy.yml).
 
-Sorts a pull request into a risk tier from facts the GitHub API reports --
+Sorts a pull request into a review tier from facts the GitHub API reports --
 changed paths, author, title, labels, and Dependabot's commit metadata -- and
 reports, as the "review-policy" commit status, whether the tier's review
 requirement is met:
 
-  low     no human approval; the Claude review must be clean (Dependabot
-          excepted, since the Claude review does not run for bots)
-  medium  one human approval
-  high    one human approval; the branch ruleset's code-owner rule, with a
-          CODEOWNERS that lists only high-risk paths, picks who
+  auto   no human approval
+  human  one human approval; for sensitive paths the branch ruleset's
+         code-owner rule picks who
 
-The tier is also applied as a `risk:<tier>` label. Nothing here reads or runs
-PR code, and the config is read from the caller's default branch, so a PR
-cannot change the rules it is judged by.
+Both tiers also need a clean Claude review, except on PRs it does not run
+for: those by bots, and by authors who are not members or collaborators.
+Dependabot PRs follow their own rules (classify_dependabot); in the auto tier
+CI is their only check.
+
+The tier is also applied as a `risk:<tier>` label.
+
+Security tenets:
+- Agents cannot change their own instructions, controls, or access. Changes to
+  ALWAYS_HUMAN_PATHS, and to the policy config, need a human whatever the
+  repo's config says; the config can add paths but not remove these.
+- Only data from the GitHub API and the default branch is trusted. Nothing here
+  reads or runs PR code, and the config is read from the caller's default
+  branch, so a PR cannot change the rules it is judged by.
+- When in doubt, require a human: a PR the rules cannot classify (missing
+  Dependabot metadata, an unknown update type, a truncated file list) lands in
+  the human tier.
 
 In advisory mode the status is always "success" and its description says what
 enforcement would decide, so the check can be observed (and registered as a
 required check) before it gates anything. In enforce mode it is "success" or
-"pending", and Dependabot PRs in the auto lane get auto-merge enabled when the
+"pending", and Dependabot PRs in the auto tier get auto-merge enabled when the
 caller allows it.
 
 All inputs come from environment variables set by the workflow; see main().
@@ -38,11 +50,24 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Iterable
 
-TIERS = ("low", "medium", "high")
+TIERS = ("auto", "human")
 LABEL_PREFIX = "risk:"
 STATUS_CONTEXT = "review-policy"
 AI_REVIEW_CONTEXT = "Claude review"
 DEPENDABOT = "dependabot[bot]"
+# Agent instructions, review guidance, ownership, and CI. Always need a human,
+# for every repo: a repo's config can add to this but not remove from it.
+ALWAYS_HUMAN_PATHS = (
+    ".github/",
+    "**/CODEOWNERS",
+    "**/REVIEW.md",
+    "**/AGENTS.md",
+    "**/CLAUDE.md",
+    "**/.claude/",
+)
+# Authors the Claude review runs for. Keep in sync with
+# reusable_claude_pr_review.yml.
+AI_REVIEWED_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
 # Who GITHUB_TOKEN statuses are attributed to.
 BOT_LOGINS = {"github-actions", "github-actions[bot]"}
 # Conventional-commit breaking change: `feat!:` or `feat(scope)!:`.
@@ -64,23 +89,31 @@ class DependabotConfig:
 
 @dataclass(frozen=True)
 class Config:
-    high_risk_paths: tuple[str, ...] = ()
-    low_risk_paths: tuple[str, ...] = ()
-    low_risk_exclude: tuple[str, ...] = ()
-    low_risk_max_changed_lines: int = 0
+    # Paths that may merge with no human approval...
+    auto_paths: tuple[str, ...] = ()
+    # ...unless they also match one of these, or ALWAYS_HUMAN_PATHS.
+    human_paths: tuple[str, ...] = ()
+    auto_max_changed_lines: int = 0
     # Authors whose PRs always need a human, e.g. the release bot.
     human_review_authors: tuple[str, ...] = ()
-    # author_association values allowed into the low tier.
+    # author_association values allowed into the auto tier.
     trusted_associations: tuple[str, ...] = ("OWNER", "MEMBER", "COLLABORATOR")
     dependabot: DependabotConfig = field(default_factory=DependabotConfig)
+    # Repo-relative path the config was read from; not a config key.
+    path: str = ""
+
+    @property
+    def always_human_paths(self) -> tuple[str, ...]:
+        """The paths no config can let in without a human, the config itself included."""
+        return ALWAYS_HUMAN_PATHS + ((self.path,) if self.path else ())
 
     @classmethod
-    def parse(cls, text: str) -> Config:
+    def parse(cls, text: str, path: str = "") -> Config:
         data = tomllib.loads(text)
         dependabot = data.pop("dependabot", {})
         if not isinstance(dependabot, dict):
             raise ValueError("config key dependabot must be a table")
-        known = set(cls.__dataclass_fields__) - {"dependabot"}
+        known = set(cls.__dataclass_fields__) - {"dependabot", "path"}
         unknown = set(data) - known
         unknown_dependabot = set(dependabot) - set(DependabotConfig.__dataclass_fields__)
         if unknown or unknown_dependabot:
@@ -88,7 +121,7 @@ class Config:
         for key, value in [*data.items(), *dependabot.items()]:
             ok = (
                 isinstance(value, int) and not isinstance(value, bool)
-                if key == "low_risk_max_changed_lines"
+                if key == "auto_max_changed_lines"
                 else isinstance(value, list) and all(isinstance(v, str) for v in value)
             )
             if not ok:
@@ -96,6 +129,7 @@ class Config:
         return cls(
             **{k: tuple(v) if isinstance(v, list) else v for k, v in data.items()},
             dependabot=DependabotConfig(**{k: tuple(v) for k, v in dependabot.items()}),
+            path=path,
         )
 
 
@@ -136,8 +170,8 @@ class ChangedFile:
 
     @property
     def paths(self) -> tuple[str, ...]:
-        # A rename touches both ends: moving a file out of a high-risk path is
-        # as risky as moving one in.
+        # A rename touches both ends: moving a file out of a human path is as
+        # risky as moving one in.
         return (self.path, self.previous_path) if self.previous_path else (self.path,)
 
 
@@ -222,74 +256,54 @@ def _dependency(fields: dict[str, str]) -> Dependency:
 class Classification:
     tier: str
     reasons: tuple[str, ...]
-    # Dependabot PRs only: "auto" may merge without a human, "human" may not.
-    lane: str | None = None
-
-
-def high_risk_reasons(pr: PullRequest, config: Config) -> list[str]:
-    high = [
-        f"touches high-risk path {path} ({pattern})"
-        for f in pr.files
-        for path in f.paths
-        if (pattern := matching(path, config.high_risk_paths))
-    ]
-    if pr.files_truncated:
-        high.append("too many changed files to classify")
-    return high
 
 
 def classify(pr: PullRequest, config: Config) -> Classification:
     if pr.author == DEPENDABOT:
         if "security" in pr.labels or pr.files_truncated:
-            return Classification("high", ("labeled security or too many files",), lane="human")
-        c = classify_dependabot(pr, config.dependabot)
-        # Auto-lane files sit under high-risk paths too; the lane rules decide
-        # those. A bump that needs a human gets the path's tier.
-        high = high_risk_reasons(pr, config) if c.lane == "human" else []
-        return replace(c, tier="high", reasons=c.reasons + tuple(high)) if high else c
+            return Classification("human", ("labeled security or too many files",))
+        return classify_dependabot(pr, config.dependabot, config.always_human_paths)
 
-    high = high_risk_reasons(pr, config)
+    human: list[str] = []
+    if pr.files_truncated:
+        human.append("too many changed files to classify")
     if BREAKING_RE.match(pr.title):
-        high.append("title marks a breaking change")
+        human.append("title marks a breaking change")
     if "security" in pr.labels:
-        high.append("labeled security")
-    if high:
-        return Classification("high", tuple(high))
+        human.append("labeled security")
     if pr.author in config.human_review_authors:
-        return Classification("medium", (f"PRs by {pr.author} always get a human review",))
-
-    not_low: list[str] = []
+        human.append(f"PRs by {pr.author} always get a human review")
     if pr.association not in config.trusted_associations:
-        not_low.append(f"author association {pr.association} is not trusted for the low tier")
+        human.append(f"author association {pr.association} is not trusted for the auto tier")
     for f in pr.files:
         for path in f.paths:
-            if not matching(path, config.low_risk_paths):
-                not_low.append(f"{path} is not a low-risk path")
-            elif matching(path, config.low_risk_exclude):
-                not_low.append(f"{path} is excluded from the low tier")
+            if pattern := matching(path, config.always_human_paths + config.human_paths):
+                human.append(f"{path} always needs a human ({pattern})")
+            elif not matching(path, config.auto_paths):
+                human.append(f"{path} is not an auto path")
     changed = sum(f.changes for f in pr.files)
-    if changed > config.low_risk_max_changed_lines:
-        not_low.append(f"{changed} changed lines exceeds the low-tier limit of {config.low_risk_max_changed_lines}")
+    if changed > config.auto_max_changed_lines:
+        human.append(f"{changed} changed lines exceeds the auto-tier limit of {config.auto_max_changed_lines}")
     if not pr.files:
-        not_low.append("no changed files")
-    if not_low:
-        return Classification("medium", tuple(not_low))
-    return Classification("low", ("only low-risk paths, from a trusted author",))
+        human.append("no changed files")
+    if human:
+        return Classification("human", tuple(human))
+    return Classification("auto", ("only auto paths, from a trusted author",))
 
 
-def classify_dependabot(pr: PullRequest, config: DependabotConfig) -> Classification:
+def classify_dependabot(pr: PullRequest, config: DependabotConfig, always_human_paths: Iterable[str]) -> Classification:
     # Any commit by someone else, merges included (a merge can carry arbitrary
     # changes), means a person changed the update, as with the xa11y fix-ups.
-    # Dependabot rebases its own PRs, so "@dependabot rebase" keeps the lane.
+    # Dependabot rebases its own PRs, so "@dependabot rebase" keeps the tier.
     edited = [c for c in pr.commits if c.author != DEPENDABOT or not c.github_signed]
     if edited:
-        return Classification("medium", (f"has commits by {edited[0].author}, not just Dependabot",), lane="human")
+        return Classification("human", (f"has commits by {edited[0].author}, not just Dependabot",))
     found = next(
         ((c, d) for c in reversed(pr.commits) if (d := parse_dependabot_metadata(c.message))),
         None,
     )
     if found is None:
-        return Classification("medium", ("no Dependabot metadata in its commits",), lane="human")
+        return Classification("human", ("no Dependabot metadata in its commits",))
     commit, deps = found
     if len(deps) == 1 and not deps[0].update_type:
         # Requirement-range updates ("from ==2.3.* to ==2.4.*") carry no
@@ -303,9 +317,13 @@ def classify_dependabot(pr: PullRequest, config: DependabotConfig) -> Classifica
     human: list[str] = []
     is_actions = any(f.path.startswith(WORKFLOW_DIRS) for f in pr.files)
     for f in pr.files:
+        # Action bumps are judged by owner below. Every other file under the
+        # always-human paths needs a human, whatever auto_merge_files says.
         if f.path.startswith(WORKFLOW_DIRS):
             continue
-        if not matching(f.path, config.auto_merge_files):
+        if pattern := matching(f.path, always_human_paths):
+            human.append(f"updates {f.path}, which always needs a human ({pattern})")
+        elif not matching(f.path, config.auto_merge_files):
             human.append(f"updates {f.path}, which is not an auto-merge file")
     for dep in deps:
         if dep.update_type not in ("semver-minor", "semver-patch"):
@@ -317,9 +335,9 @@ def classify_dependabot(pr: PullRequest, config: DependabotConfig) -> Classifica
         if is_actions and "/" in dep.name and dep.name.split("/")[0] not in config.trusted_action_owners:
             human.append(f"{dep.name} is not from a trusted action owner")
     if human:
-        return Classification("medium", tuple(human), lane="human")
+        return Classification("human", tuple(human))
     names = ", ".join(f"{d.name} {d.version}" for d in deps)
-    return Classification("low", (f"patch/minor update of {names}",), lane="auto")
+    return Classification("auto", (f"patch/minor update of {names}",))
 
 
 @dataclass(frozen=True)
@@ -364,27 +382,40 @@ def decide(
     trusted: Iterable[str] = Config.trusted_associations,
 ) -> tuple[bool, str]:
     """Whether the tier's requirement is met, and a one-line reason."""
-    tier = classification.tier
+    prefix = f"{classification.tier.capitalize()} tier"
     reviews = list(reviews)
     blocking = sorted(u for u, r in latest_reviews(pr, reviews, trusted).items() if r.state == "CHANGES_REQUESTED")
     if blocking:
-        return False, f"{tier.capitalize()} risk: changes requested by {', '.join(blocking)}"
-    if tier == "low":
-        if pr.author == DEPENDABOT:
-            # The Claude review skips bots; CI is what checks a dependency bump.
-            return True, "Low risk: no human approval needed"
-        if ai_review_state == "success":
-            return True, "Low risk: Claude review is clean, no human approval needed"
-        if ai_review_state in (None, "pending"):
-            return False, "Low risk: waiting for the Claude review"
-        if ai_review_state == "error":
-            return False, "Low risk: Claude review did not finish; re-run it"
-        return False, "Low risk: Claude review has open findings"
+        return False, f"{prefix}: changes requested by {', '.join(blocking)}"
+    if pr.author == DEPENDABOT:
+        # The Claude review skips bots; CI is what checks a dependency bump.
+        ai_wait = None
+    elif classification.tier == "human" and not ai_review_runs(pr):
+        # Nothing would ever clear it; the human approval has to do.
+        ai_wait = None
+    elif ai_review_state == "success":
+        ai_wait = None
+    elif ai_review_state in (None, "pending"):
+        ai_wait = "waiting for the Claude review"
+    elif ai_review_state == "error":
+        ai_wait = "Claude review did not finish, re-run it"
+    else:
+        ai_wait = "Claude review has open findings"
+    if classification.tier == "auto":
+        if ai_wait:
+            return False, f"{prefix}: {ai_wait}"
+        clean = "" if pr.author == DEPENDABOT else "Claude review is clean, "
+        return True, f"{prefix}: {clean}no human approval needed"
     who = approvers(pr, reviews, trusted)
-    if who:
-        return True, f"{tier.capitalize()} risk: approved by {', '.join(who)}"
-    owner = " (code owner)" if tier == "high" else ""
-    return False, f"{tier.capitalize()} risk: needs 1 human approval{owner}"
+    if who and not ai_wait:
+        return True, f"{prefix}: approved by {', '.join(who)}"
+    needs = ([] if who else ["needs 1 human approval"]) + ([ai_wait] if ai_wait else [])
+    return False, f"{prefix}: {'; '.join(needs)}"
+
+
+def ai_review_runs(pr: PullRequest) -> bool:
+    """Whether the Claude review runs for this PR's author at all."""
+    return not pr.author.endswith("[bot]") and pr.association in AI_REVIEWED_ASSOCIATIONS
 
 
 def status_for(met: bool, reason: str, enforce: bool) -> tuple[str, str]:
@@ -468,7 +499,7 @@ def fetch_statuses(repo: str, sha: str) -> tuple[dict[str, tuple[str, str]], dic
     """Latest (state, description) per context: from this repo's workflows, and from anyone.
 
     Anyone with write access can post a status under any context name, so a
-    "Claude review" from anyone else must not satisfy the low tier. The
+    "Claude review" from anyone else must not satisfy the policy. The
     newest from anyone is what GitHub shows, so it decides whether to repost.
     """
     trusted: dict[str, tuple[str, str]] = {}
@@ -516,7 +547,7 @@ def write_summary(pr: PullRequest, c: Classification, state: str, description: s
     if not path:
         return
     lines = [
-        f"### Review policy: PR #{pr.number} is `{c.tier}` risk" + (f" (Dependabot lane: {c.lane})" if c.lane else ""),
+        f"### Review policy: PR #{pr.number} is in the `{c.tier}` tier",
         "",
         *[f"- {r}" for r in c.reasons],
         "",
@@ -548,7 +579,7 @@ def evaluate(
             print(f"::notice::#{number}'s status changed while evaluating; leaving it to the newer run.")
         else:
             set_status(repo, head_sha, state, description, run_url)
-    wanted = enforce and auto_merge and classification.lane == "auto" and met
+    wanted = enforce and auto_merge and pr.author == DEPENDABOT and classification.tier == "auto" and met
     if wanted and pr.auto_merge_by is None:
         set_auto_merge(repo, number, enable=True, head_sha=head_sha)
     elif not wanted and pr.auto_merge_by in BOT_LOGINS:
@@ -556,7 +587,7 @@ def evaluate(
         # status always succeeds, so a stale arm would merge unreviewed.
         set_auto_merge(repo, number, enable=False)
     write_summary(pr, classification, state, description)
-    print(f"tier={classification.tier} lane={classification.lane} met={met} status={state}")
+    print(f"tier={classification.tier} met={met} status={state}")
 
 
 def sweep(repo: str, config: Config, *, enforce: bool, auto_merge: bool, run_url: str) -> None:
@@ -590,7 +621,9 @@ def main() -> None:
     head_sha = os.environ.get("HEAD_SHA", "")
     if number and (not number.isdigit() or not SHA_RE.match(head_sha)):
         raise SystemExit("bad PR_NUMBER or HEAD_SHA")
-    config = Config.parse(Path(os.environ["CONFIG_FILE"]).read_text(encoding="utf-8"))
+    config = Config.parse(
+        Path(os.environ["CONFIG_FILE"]).read_text(encoding="utf-8"), path=os.environ.get("CONFIG_PATH", "")
+    )
     mode = os.environ.get("MODE", "advisory")
     if mode not in ("advisory", "enforce"):
         raise SystemExit(f"bad MODE {mode!r}")

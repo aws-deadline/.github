@@ -1,6 +1,7 @@
-# Risk-tiered review policy: sorts each PR into a low / medium / high risk tier
-# and reports, as the "review-policy" commit status, whether the tier's review
-# requirement is met. See .github/scripts/review_policy.py for the rules.
+# Tiered review policy: sorts each PR into an auto or human review tier and
+# reports, as the "review-policy" commit status, whether the tier's review
+# requirement is met. See .github/scripts/review_policy.py for the rules and
+# the security tenets they follow.
 #
 # Opt-in: only repos that call this workflow are affected. A caller has two
 # small workflows, mirroring the Claude PR review's two-stage design:
@@ -41,7 +42,7 @@ on:
         type: string
         default: ""
       config_path:
-        description: "Path of the policy config (TOML) in the calling repo, read from the commit this workflow runs on."
+        description: "Path of the policy config (TOML) in the calling repo, read from the commit this workflow runs on. PRs that change it always need a human."
         required: false
         type: string
         default: ".github/review-policy.toml"
@@ -51,7 +52,7 @@ on:
         type: string
         default: "advisory"
       auto_merge:
-        description: "In enforce mode, enable auto-merge on Dependabot PRs in the auto lane. Needs contents: write. Merges made with GITHUB_TOKEN do not trigger push workflows on the base branch."
+        description: "In enforce mode, enable auto-merge on Dependabot PRs in the auto tier. Needs contents: write. Merges made with GITHUB_TOKEN do not trigger push workflows on the base branch."
         required: false
         type: boolean
         default: false
