@@ -164,6 +164,12 @@ class ClassifyTest(TestCase):
             ".github/workflows/ci.yml",
             ".claude/settings.json",
             "sub/.claude/agents/x.md",
+            ".kiro/steering/rules.md",
+            ".amazonq/rules/x.md",
+            "pkg/.cursor/rules/x.mdc",
+            ".cursorrules",
+            ".mcp.json",
+            "sub/.mcp.json",
             ".github/review-policy.toml",
         ):
             with self.subTest(path=path):
@@ -181,7 +187,7 @@ class ClassifyTest(TestCase):
         self.assertEqual(policy.classify(pr, OPEN_CONFIG).tier, "human")
 
     def test_lookalikes_are_not_always_human(self) -> None:
-        for path in ("docs/github/x.md", "docs/REVIEW.md.bak", "MY_AGENTS.md", "docs/claude/x.md"):
+        for path in ("docs/github/x.md", "docs/REVIEW.md.bak", "MY_AGENTS.md", "docs/claude/x.md", "docs/kiro.md"):
             with self.subTest(path=path):
                 pr = replace(PR, files=(policy.ChangedFile(path, changes=1),))
                 self.assertEqual(policy.classify(pr, OPEN_CONFIG).tier, "auto")

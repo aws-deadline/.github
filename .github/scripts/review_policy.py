@@ -22,6 +22,10 @@ Security tenets:
 - Agents cannot change their own instructions, controls, or access. Changes to
   ALWAYS_HUMAN_PATHS, and to the policy config, need a human whatever the
   repo's config says; the config can add paths but not remove these.
+- A rule can only be loosened by a human, in a repo the rule does not govern.
+  ALWAYS_HUMAN_PATHS lives in aws-deadline/.github, not in the repos it
+  protects. A repo's config can loosen only its own rules, never these, and
+  changing it always needs a human.
 - Only data from the GitHub API and the default branch is trusted. Nothing here
   reads or runs PR code, and the config is read from the caller's default
   branch, so a PR cannot change the rules it is judged by.
@@ -55,8 +59,10 @@ LABEL_PREFIX = "risk:"
 STATUS_CONTEXT = "review-policy"
 AI_REVIEW_CONTEXT = "Claude review"
 DEPENDABOT = "dependabot[bot]"
-# Agent instructions, review guidance, ownership, and CI. Always need a human,
-# for every repo: a repo's config can add to this but not remove from it.
+# The control plane: agent instructions and config, review guidance,
+# ownership, and CI. Always need a human, for every repo: a repo's config can
+# add to this but not remove from it. Repo-specific risk (shipped code,
+# installers, integration tests) belongs in each repo's human_paths.
 ALWAYS_HUMAN_PATHS = (
     ".github/",
     "**/CODEOWNERS",
@@ -64,6 +70,11 @@ ALWAYS_HUMAN_PATHS = (
     "**/AGENTS.md",
     "**/CLAUDE.md",
     "**/.claude/",
+    "**/.kiro/",
+    "**/.amazonq/",
+    "**/.cursor/",
+    "**/.cursorrules",
+    "**/.mcp.json",
 )
 # Authors the Claude review runs for. Keep in sync with
 # reusable_claude_pr_review.yml.
