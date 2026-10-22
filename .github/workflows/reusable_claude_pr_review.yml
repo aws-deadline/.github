@@ -161,11 +161,17 @@ jobs:
       # problem and still hard-fails (exit 1). Only "0 or >1 open PRs" -- an
       # absence of work, not a forged input -- downgrades to a clean skip.
       #
-      # Two more clean skips:
+      # Three more clean skips:
       # - Runs triggered by a bot (Dependabot and friends). claude-code-action
       #   refuses non-human actors, so these would only fail.
       # - A head that is no longer the PR's head after the debounce wait. A
       #   newer push has its own run; reviewing this commit would be wasted.
+      # - PRs from anyone but members and collaborators (author_association not
+      #   OWNER, MEMBER, or COLLABORATOR): the review spends model time and
+      #   reads untrusted code, so it runs only for the team. The association
+      #   is read from the base repo's API for the resolved PR, never from
+      #   anything the fork controls. The review policy keeps these PRs out of
+      #   its auto tier and does not wait for a review on them.
       - name: Resolve and validate PR from trusted head SHA
         id: meta
         env:
@@ -223,13 +229,25 @@ jobs:
           [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || { echo "::error::bad pr_number"; exit 1; }
           [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad base_sha"; exit 1; }
 
+          # Keep in sync with AI_REVIEWED_ASSOCIATIONS in review_policy.py.
+          ASSOCIATION=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '.author_association')
+          case "$ASSOCIATION" in
+            OWNER|MEMBER|COLLABORATOR) ;;
+            *)
+              echo "::notice::PR #$PR_NUMBER's author is not a member or collaborator (author_association $ASSOCIATION); skipping review."
+              echo "resolved=false" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
           echo "resolved=true" >> "$GITHUB_OUTPUT"
           echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
           echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
 
       # All steps below run only when a unique open PR was resolved above. If
-      # the step skipped (no unique open PR, bot actor, superseded head),
+      # the step skipped (no unique open PR, bot actor, superseded head,
+      # author not a member or collaborator),
       # `resolved` is false and every remaining step (including the credential
       # and agent steps) is skipped, so the job finishes green without touching
       # AWS or posting anything.
