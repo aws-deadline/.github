@@ -7,6 +7,14 @@
 #
 # Docs: https://docs.zizmor.sh/configuration/
 rules:
+  dangerous-triggers:
+    ignore:
+      # Member repos use responded.yml to call reusable_responded.yml on issue_comment.
+      # The shared workflow only updates labels with a quoted issue/PR number from
+      # an environment variable; it never checks out contributor code or executes
+      # comment text. Reassess this exception when either workflow changes.
+      # Keep dangerous-triggers enabled for all other workflow filenames.
+      - responded.yml
   unpinned-uses:
     config:
       policies:
