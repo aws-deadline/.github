@@ -88,6 +88,24 @@ jobs:
       with:
         version: "0.13.4"
 
+    # Hatch environments created by uv do not contain a pip executable. Route
+    # repositories' existing `pip` commands through the pinned uv installation.
+    - name: Route pip commands through uv
+      shell: bash
+      run: |
+        python - <<'PY'
+        import os
+        from pathlib import Path
+
+        shim_dir = Path(os.environ["RUNNER_TEMP"]) / "uv-pip-shim"
+        shim_dir.mkdir(exist_ok=True)
+        (shim_dir / "pip").write_text('#!/bin/sh\nexec uv pip "$@"\n')
+        (shim_dir / "pip").chmod(0o755)
+        (shim_dir / "pip.cmd").write_text("@echo off\r\nuv pip %*\r\n")
+        with open(os.environ["GITHUB_PATH"], "a") as github_path:
+            github_path.write(f"{shim_dir}\n")
+        PY
+
     - name: Install Hatch
       shell: bash
       run: |
