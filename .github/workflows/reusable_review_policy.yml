@@ -1,0 +1,166 @@
+# Tiered review policy: sorts each PR into an auto or human review tier and
+# reports, as the "review-policy" commit status, whether the tier's review
+# requirement is met. See .github/scripts/review_policy.py for the rules and
+# the security tenets they follow.
+#
+# Opt-in: only repos that call this workflow are affected. A caller has two
+# small workflows, mirroring the Claude PR review's two-stage design:
+#   collect  on pull_request / pull_request_review, does nothing; it exists
+#            only so its completion fires workflow_run.
+#   policy   on workflow_run of collect, calls this workflow for that PR;
+#            on a schedule, calls it with no PR to sweep all open PRs.
+# workflow_run runs from the caller's default branch with a write token even
+# for fork PRs, and its head repo / head SHA come from the server-populated
+# event payload, which a fork cannot forge. The Claude review sets its status
+# with GITHUB_TOKEN, which triggers no workflow, so callers also run this right
+# after their Claude review; the sweep is a fallback for missed events.
+#
+# Nothing here checks out or runs PR code: the script reads the PR through the
+# API, and the caller's policy config is read from the default-branch commit
+# the workflow runs on, so a PR cannot change the rules it is judged by.
+#
+# The job declares no permissions, so it inherits exactly what the caller
+# grants. Callers grant, least privilege:
+#   contents: read        read the policy config
+#   pull-requests: write  read reviews and files; set the risk label
+#   issues: write         set the risk label
+#   statuses: write       set the "review-policy" commit status
+#   contents: write       only with auto_merge, instead of contents: read
+name: Review Policy
+
+on:
+  workflow_call:
+    inputs:
+      head_repository:
+        description: "Full name (owner/repo) of the PR head repository, taken from the trusted workflow_run event payload. Empty, with head_sha, to sweep all open PRs."
+        required: false
+        type: string
+        default: ""
+      head_sha:
+        description: "PR head commit SHA, taken from the trusted workflow_run event payload. The PR number is resolved from this. Empty, with head_repository, to sweep all open PRs."
+        required: false
+        type: string
+        default: ""
+      config_path:
+        description: "Path of the policy config (TOML) in the calling repo, read from the commit this workflow runs on. PRs that change it always need a human."
+        required: false
+        type: string
+        default: ".github/review-policy.toml"
+      mode:
+        description: "advisory: the status always succeeds and says what enforcement would decide. enforce: the status is pending until the tier's requirement is met."
+        required: false
+        type: string
+        default: "advisory"
+      auto_merge:
+        description: "In enforce mode, enable auto-merge on Dependabot PRs in the auto tier. Needs contents: write. Merges made with GITHUB_TOKEN do not trigger push workflows on the base branch."
+        required: false
+        type: boolean
+        default: false
+      tooling_repository:
+        description: "Repo holding the policy script. Defaults to this workflow's home repo; overridden only for fork testing."
+        required: false
+        type: string
+        default: "aws-deadline/.github"
+      tooling_ref:
+        description: "Ref of tooling_repository to check the policy script out from."
+        required: false
+        type: string
+        default: "mainline"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Resolve the PR from the trusted head SHA, exactly as the Claude PR
+      # review does: keep only open PRs from the trusted head repo into this
+      # repo, require exactly one, and skip cleanly when there is none (a PR
+      # merged or closed before this ran).
+      - name: Resolve PR from trusted head SHA
+        id: meta
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          EXPECTED_HEAD_REPO: ${{ inputs.head_repository }}
+        run: |
+          set -euo pipefail
+          # The config is read from github.sha; a manual run from another
+          # branch would judge every PR by that branch's rules.
+          default_branch=$(gh api "repos/$REPO" --jq .default_branch)
+          if [[ "$GITHUB_REF" != "refs/heads/$default_branch" ]]; then
+            echo "::error::Run the review policy from $default_branch, not $GITHUB_REF."
+            exit 1
+          fi
+          if [[ -z "$HEAD_SHA" && -z "$EXPECTED_HEAD_REPO" ]]; then
+            echo "::notice::No PR given; sweeping all open PRs."
+            echo "resolved=true" >> "$GITHUB_OUTPUT"
+            echo "pr_number=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad head_sha"; exit 1; }
+
+          matches=$(gh api "repos/$EXPECTED_HEAD_REPO/commits/$HEAD_SHA/pulls" \
+            --jq "[.[] | select(.state == \"open\" and .head.repo.full_name == \"$EXPECTED_HEAD_REPO\" and .base.repo.full_name == \"$REPO\")]")
+
+          count=$(echo "$matches" | jq 'length')
+          if [[ "$count" -ne 1 ]]; then
+            echo "::notice::No unique open PR for $HEAD_SHA from $EXPECTED_HEAD_REPO (found $count); nothing to evaluate, skipping."
+            echo "resolved=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PR_NUMBER=$(echo "$matches" | jq -r '.[0].number')
+          [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || { echo "::error::bad pr_number"; exit 1; }
+          echo "resolved=true" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Check out policy script
+        if: steps.meta.outputs.resolved == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.tooling_repository }}
+          ref: ${{ inputs.tooling_ref }}
+          path: workflow-tooling
+          persist-credentials: false
+          submodules: false
+          sparse-checkout: .github/scripts/review_policy.py
+          sparse-checkout-cone-mode: false
+
+      # github.sha is the caller's default-branch commit under workflow_run.
+      - name: Check out policy config
+        if: steps.meta.outputs.resolved == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.sha }}
+          path: policy-config
+          persist-credentials: false
+          submodules: false
+          sparse-checkout: ${{ inputs.config_path }}
+          sparse-checkout-cone-mode: false
+
+      # The script needs tomllib (Python 3.11+).
+      - name: Set up Python
+        if: steps.meta.outputs.resolved == 'true'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Evaluate review policy
+        if: steps.meta.outputs.resolved == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.meta.outputs.pr_number }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          CONFIG_PATH: ${{ inputs.config_path }}
+          MODE: ${{ inputs.mode }}
+          AUTO_MERGE: ${{ inputs.auto_merge }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$CONFIG_PATH" =~ ^[A-Za-z0-9._/-]+$ && "$CONFIG_PATH" != *..* ]] || { echo "::error::bad config_path"; exit 1; }
+          export CONFIG_FILE="policy-config/$CONFIG_PATH"
+          [[ -f "$CONFIG_FILE" && ! -L "$CONFIG_FILE" ]] || { echo "::error::policy config $CONFIG_PATH not found"; exit 1; }
+          python3 workflow-tooling/.github/scripts/review_policy.py
