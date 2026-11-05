@@ -5,7 +5,7 @@
 # GitHub credential; this script asks it what to do and does the GitHub writes with the job's GITHUB_TOKEN.
 #
 #   python3 release_train.py run        the run step: GITHUB_TOKEN only
-#   python3 release_train.py dispatch   the dispatch step: the caller's dispatch token only (see below)
+#   python3 release_train.py dispatch   the dispatch step: the caller's dispatch tokens only (see below)
 #
 # One run:
 #   1. Refuse unless the job runs on the repository's default branch (a workflow_run run does: GitHub runs it from
@@ -47,12 +47,14 @@
 #   6. Write the downstream repositories the gateway asked to dispatch (fan-out after a release) to a file for the
 #      dispatch step.
 #
-# The dispatch step (a separate step, so only it receives the caller's dispatch token, and it runs nothing but
+# The dispatch step (a separate step, so only it receives the caller's dispatch tokens, and it runs nothing but
 # this script): for each target, check that the repository is in both the gateway's allowlist and the caller's
 # own hard-coded list (dispatch_repos), that the workflow is release_train.yml and the ref that repository's
 # default branch, then POST /repos/<owner>/<repo>/actions/workflows/release_train.yml/dispatches and nothing else.
-# Without a token it skips with a notice: the downstream repository's daily run picks the release up. It reports
-# each outcome with {"phase": "dispatched"}.
+# There is one token per GitHub organization (DISPATCH_TOKEN_ENV), chosen by the target's owner: a target owned
+# by any other account is refused, and a target whose organization has no token skips with a notice (the
+# downstream repository's daily run picks the release up). A target never gets another organization's token.
+# It reports each outcome with {"phase": "dispatched"}.
 #
 # Nothing here checks out or executes repository code: the bundle is fetched into a bare repository and only
 # inspected with git plumbing. The GITHUB_TOKEN reaches git only through the environment of the one fetch or
@@ -95,6 +97,11 @@ DISPATCHABLE = frozenset({"release_bump.yml"})
 BUMP_INPUTS: dict[str, frozenset[str]] = {"force_version_bump": frozenset({"", "patch", "minor", "major"})}
 # The fan-out: the one workflow of a downstream repository the dispatch step may start.
 FANOUT_WORKFLOW = "release_train.yml"
+# The organizations a fan-out target may belong to (owner, lower case: GitHub owners are case-insensitive), each
+# with the environment variable of its own dispatch token and its display name.
+DISPATCH_TOKEN_ENV: dict[str, str] = {"openjobdescription": "RT_DISPATCH_TOKEN_OPENJOBDESCRIPTION",
+                                      "aws-deadline": "RT_DISPATCH_TOKEN_AWS_DEADLINE"}
+DISPATCH_ORG_NAMES: dict[str, str] = {"openjobdescription": "OpenJobDescription", "aws-deadline": "aws-deadline"}
 REPO_NAME = re.compile(r"[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}")
 BRANCH_NAME = re.compile(r"(?!-)(?!.*\.\.)[A-Za-z0-9._/-]{1,100}(?<![./])")
 CLAIM_KEY = re.compile(r"DISPATCH#release#[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}#[A-Za-z0-9._:-]{1,100}#"
@@ -814,7 +821,7 @@ def parse_repos(text: str) -> frozenset[str]:
     return frozenset(r for r in re.split(r"[\s,]+", text or "") if r)
 
 
-def _dispatch_one(target: dict[str, Any], token: str, allowed: set[str], caller_repos: frozenset[str],
+def _dispatch_one(target: dict[str, Any], tokens: dict[str, str], allowed: set[str], caller_repos: frozenset[str],
                   api_for: Callable[[str], Callable[..., Any]], sleep: Callable[[float], None]) -> dict[str, Any]:
     key: str = str(target.get("key", ""))
     repo: str = str(target.get("repo", ""))
@@ -824,11 +831,17 @@ def _dispatch_one(target: dict[str, Any], token: str, allowed: set[str], caller_
             or target.get("workflow") != FANOUT_WORKFLOW or not BRANCH_NAME.fullmatch(ref):
         out["error"] = f"a dispatch may start only {FANOUT_WORKFLOW} of an owner/repo on a branch"
         return out
+    org: str = repo.split("/", 1)[0].lower()
+    if org not in DISPATCH_TOKEN_ENV:
+        out["error"] = f"{repo} is owned by neither OpenJobDescription nor aws-deadline"
+        return out
     if repo not in allowed or repo not in caller_repos:
         out["error"] = f"{repo} is not in both the gateway's allowlist and this repository's dispatch_repos"
         return out
+    # Only this organization's token: a missing one skips the target, never falling back to the other's.
+    token: str = tokens.get(org, "")
     if not token:
-        out.update(outcome="no-token", error="no dispatch token is configured")
+        out.update(outcome="no-token", error=f"no dispatch token is configured for {DISPATCH_ORG_NAMES[org]}")
         return out
     api: Callable[..., Any] = api_for(token)
     try:
@@ -855,13 +868,14 @@ def _dispatch_one(target: dict[str, Any], token: str, allowed: set[str], caller_
     return out
 
 
-def dispatch(doc: dict[str, Any], token: str, caller_repos: frozenset[str],
+def dispatch(doc: dict[str, Any], tokens: dict[str, str], caller_repos: frozenset[str],
              api_for: Callable[[str], Callable[..., Any]], sleep: Callable[[float], None] = time.sleep,
              ) -> list[dict[str, Any]]:
-    """Dispatch each fan-out target the run collected; one result per target, never naming the token."""
+    """Dispatch each fan-out target the run collected with its organization's token (`tokens`, keyed by the
+    lower-case owner); one result per target, never naming a token."""
     allowed: set[str] = {str(r) for r in doc.get("allowed", [])}
     targets: list[Any] = [t for t in doc.get("targets", []) if isinstance(t, dict)][:20]
-    return [_dispatch_one(t, token, allowed, caller_repos, api_for, sleep) for t in targets]
+    return [_dispatch_one(t, tokens, allowed, caller_repos, api_for, sleep) for t in targets]
 
 
 def run_dispatch() -> int:
@@ -874,13 +888,13 @@ def run_dispatch() -> int:
     if not doc.get("targets"):
         print("No downstream dispatches.")
         return 0
-    token: str = os.environ.get("RT_DISPATCH_TOKEN", "").strip()
-    if not token:
-        print("::notice::No dispatch token is configured: the downstream repositories are not dispatched; their "
-              "daily release-train run picks the release up.")
+    tokens: dict[str, str] = {org: os.environ.get(env, "").strip() for org, env in DISPATCH_TOKEN_ENV.items()}
     base: str = os.environ.get("GITHUB_API_URL", "https://api.github.com")
-    results: list[dict[str, Any]] = dispatch(doc, token, parse_repos(os.environ.get("RT_DISPATCH_REPOS", "")),
+    results: list[dict[str, Any]] = dispatch(doc, tokens, parse_repos(os.environ.get("RT_DISPATCH_REPOS", "")),
                                              lambda t: github_api(t, base))
+    for org in sorted({r["repo"].split("/", 1)[0].lower() for r in results if r["outcome"] == "no-token"}):
+        print(f"::notice::No dispatch token is configured for {DISPATCH_ORG_NAMES[org]}: its downstream "
+              "repositories are not dispatched; their daily release-train run picks the release up.")
     lines: list[str] = ["## Downstream dispatches", "", "| repository | result |", "| --- | --- |"]
     for r in results:
         lines.append(f"| {r['repo']} | {r['outcome']}{': ' + r['error'] if r['error'] else ''} |")

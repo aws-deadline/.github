@@ -31,10 +31,13 @@
 # the account id is configured in one place.
 #
 # Downstream repositories: after a release, the gateway names the repositories whose release train should run
-# next. A separate step dispatches their release_train.yml with the optional dispatch_token secret (the only
-# step that sees it; it runs only the script's dispatch command) after checking each one against the gateway's
-# allowlist and the caller's own dispatch_repos. Without the secret the step skips, and those repositories'
-# daily runs pick the release up.
+# next. A separate step dispatches their release_train.yml (the only step that sees the dispatch tokens; it runs
+# only the script's dispatch command) after checking each one against the gateway's allowlist and the caller's
+# own dispatch_repos. There is one optional token per GitHub organization, chosen by the target's owner:
+# dispatch_token_openjd for OpenJobDescription/* and dispatch_token_aws_deadline for aws-deadline/*; a target
+# owned by anyone else is refused. Each should be a fine-grained token owned by a bot user with only
+# Actions: read and write on the target repositories. Without an organization's token its targets are skipped
+# (never dispatched with the other token), and those repositories' daily runs pick the release up.
 name: Release train
 
 on:
@@ -83,8 +86,11 @@ on:
       role_arn:
         description: "ARN of the OIDC role that may invoke the gateway function."
         required: true
-      dispatch_token:
-        description: "Optional token that may run workflows (actions: write) in the dispatch_repos repositories. Only the dispatch step receives it."
+      dispatch_token_openjd:
+        description: "Optional fine-grained token (resource owner OpenJobDescription, Actions: read and write only) that may run release_train.yml in the OpenJobDescription repositories of dispatch_repos. Only the dispatch step receives it."
+        required: false
+      dispatch_token_aws_deadline:
+        description: "Optional fine-grained token (resource owner aws-deadline, Actions: read and write only) that may run release_train.yml in the aws-deadline repositories of dispatch_repos. Only the dispatch step receives it."
         required: false
 
 # Callers grant, least privilege:
@@ -136,12 +142,14 @@ jobs:
           RT_DISPATCH_FILE: ${{ runner.temp }}/release-train-dispatch.json
         run: python3 workflow-tooling/.github/scripts/release_train.py run
 
-      # The only step that sees the dispatch token. It runs nothing but the script's dispatch command, which
-      # may only POST .../actions/workflows/release_train.yml/dispatches for repositories on both lists.
+      # The only step that sees the dispatch tokens. It runs nothing but the script's dispatch command, which
+      # may only POST .../actions/workflows/release_train.yml/dispatches for repositories on both lists, each
+      # with the token of its own organization.
       - name: Dispatch the downstream release trains
         if: ${{ !cancelled() }}
         env:
-          RT_DISPATCH_TOKEN: ${{ secrets.dispatch_token }}
+          RT_DISPATCH_TOKEN_OPENJOBDESCRIPTION: ${{ secrets.dispatch_token_openjd }}
+          RT_DISPATCH_TOKEN_AWS_DEADLINE: ${{ secrets.dispatch_token_aws_deadline }}
           RT_DISPATCH_REPOS: ${{ inputs.dispatch_repos }}
           RT_DISPATCH_FILE: ${{ runner.temp }}/release-train-dispatch.json
           RT_GATEWAY_FUNCTION: ${{ inputs.gateway_function }}
