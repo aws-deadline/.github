@@ -110,6 +110,7 @@ POLL_S = 20.0
 MAX_WAIT_S = 65 * 60.0
 RELEASE_PR_WAIT_S = 15 * 60.0
 MAX_GATEWAY_FAILURES = 3
+ID_TOKEN_ATTEMPTS = 3
 DISPATCH_ATTEMPTS = 3
 GUARDED_PREFIXES = (".github/",)
 GUARDED_FILES = frozenset({".gitmodules"})
@@ -614,19 +615,35 @@ def download(url: str, limit: int) -> bytes:
     return data
 
 
-def id_token(audience: str) -> str:
+class GatewayError(Exception):
+    pass
+
+
+def id_token(audience: str, sleep: Callable[[float], None] = time.sleep) -> str:
+    """A fresh OIDC ID token for the gateway. The runner's token service sometimes answers 5xx or drops the
+    connection: that is retried, and a token that still does not arrive is a GatewayError, which the wait loop
+    retries like a failed gateway call (and which ends the run with an error, not a traceback)."""
     url: str = os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"]
     sep: str = "&" if "?" in url else "?"
     req = urllib.request.Request(f"{url}{sep}audience={urllib.parse.quote(audience)}", headers={
         "Authorization": f"bearer {os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}"})
-    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 - the runner's token service
-        value: str = json.loads(resp.read())["value"]
-    print(f"::add-mask::{value}")
-    return value
-
-
-class GatewayError(Exception):
-    pass
+    reason: str = ""
+    for attempt in range(1, ID_TOKEN_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 - the runner's token service
+                value: str = json.loads(resp.read())["value"]
+        except urllib.error.HTTPError as e:
+            if e.code < 500:
+                raise GatewayError(f"no OIDC ID token: HTTP {e.code}") from None
+            reason = f"HTTP {e.code}"
+        except (urllib.error.URLError, TimeoutError) as e:
+            reason = type(e).__name__
+        else:
+            print(f"::add-mask::{value}")
+            return value
+        if attempt < ID_TOKEN_ATTEMPTS:
+            sleep(2.0 * attempt)
+    raise GatewayError(f"no OIDC ID token after {ID_TOKEN_ATTEMPTS} attempts: {reason}")
 
 
 def invoke(function: str, payload: dict[str, Any], workdir: Path) -> dict[str, Any]:

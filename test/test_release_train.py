@@ -722,6 +722,76 @@ class TestWaiting(TestCase):
         self.assertLessEqual(self.clock.now - 1000.0, rt.RELEASE_PR_WAIT_S + 20.0)
 
 
+class TestIdToken(TestCase):
+    """The OIDC ID token for the gateway: a transient failure of the runner's token service is retried."""
+
+    def setUp(self) -> None:
+        env = mock.patch.dict(os.environ, {"ACTIONS_ID_TOKEN_REQUEST_URL": "https://token.example/x?api-version=2",
+                                           "ACTIONS_ID_TOKEN_REQUEST_TOKEN": "req-t0ken"})
+        env.start()
+        self.addCleanup(env.stop)
+        self.sleeps: list[float] = []
+
+    def urlopen(self, outcomes: list[Any]) -> Any:
+        self.calls: list[str] = []
+
+        def fake(req: Any, timeout: float) -> Any:
+            self.calls.append(req.full_url)
+            outcome: Any = outcomes.pop(0)
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return contextlib.nullcontext(io.BytesIO(json.dumps({"value": outcome}).encode()))
+
+        return mock.patch.object(rt.urllib.request, "urlopen", fake)
+
+    def http_error(self, code: int) -> Exception:
+        return rt.urllib.error.HTTPError("https://token.example/x", code, "boom", {}, io.BytesIO(b""))  # type: ignore[arg-type]
+
+    def test_a_server_error_from_the_token_service_is_retried(self) -> None:
+        with self.urlopen([self.http_error(503), rt.urllib.error.URLError("reset"), "id-t0ken"]), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(rt.id_token("rt-train-gateway", sleep=self.sleeps.append), "id-t0ken")
+        self.assertEqual(len(self.calls), 3)
+        self.assertTrue(all(c.endswith("&audience=rt-train-gateway") for c in self.calls))
+        self.assertEqual(self.sleeps, [2.0, 4.0])
+
+    def test_a_token_service_that_keeps_failing_is_a_gateway_error_not_a_crash(self) -> None:
+        with self.urlopen([self.http_error(503)] * rt.ID_TOKEN_ATTEMPTS):
+            with self.assertRaisesRegex(rt.GatewayError, "no OIDC ID token after 3 attempts: HTTP 503"):
+                rt.id_token("rt-train-gateway", sleep=self.sleeps.append)
+        self.assertEqual(len(self.calls), rt.ID_TOKEN_ATTEMPTS)
+
+    def test_a_refused_token_request_is_not_retried(self) -> None:
+        with self.urlopen([self.http_error(403)]):
+            with self.assertRaisesRegex(rt.GatewayError, "no OIDC ID token: HTTP 403"):
+                rt.id_token("rt-train-gateway", sleep=self.sleeps.append)
+        self.assertEqual((len(self.calls), self.sleeps), (1, []))
+
+    def test_a_failed_token_while_waiting_counts_as_a_failed_gateway_call(self) -> None:
+        # The run's wait loop retries a GatewayError and ends cleanly after MAX_GATEWAY_FAILURES; before, the
+        # token service's 503 escaped it as a traceback and failed the job.
+        outcomes: list[Any] = [self.http_error(503)] * (rt.ID_TOKEN_ATTEMPTS * rt.MAX_GATEWAY_FAILURES)
+        with self.urlopen(outcomes):
+            plans: list[dict[str, Any]] = [{"actions": [], "wait": {"busy": True}, "dispatch": {}}]
+
+            def call(payload: dict[str, Any]) -> dict[str, Any]:
+                if payload["phase"] == "plan":
+                    return plans[0]
+                rt.id_token("rt-train-gateway", sleep=self.sleeps.append)
+                raise AssertionError("unreachable: the token never arrives")
+
+            ctx: Any = rt.Context(repo=REPO, default_branch="mainline", token="t", mode="rehearsal",
+                                  workdir=Path(tempfile.mkdtemp()), api=lambda *a, **k: None, download=lambda u, n: b"")
+            clock: list[float] = [0.0]
+
+            def tick(s: float) -> None:
+                clock[0] += s
+
+            conv: Any = rt.converse(ctx, call, wait_s=3600.0, now=lambda: clock[0], sleep=tick, poll_s=1.0)
+        self.assertTrue(conv.failed)
+        self.assertIn("the gateway failed 3 times while waiting: no OIDC ID token after 3 attempts", conv.ended)
+
+
 class DispatchApi:
     """GitHub as the dispatch step sees it, with the dispatch token."""
 
