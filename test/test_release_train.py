@@ -988,3 +988,96 @@ class TestRunDispatch(TestCase):
                 for text in (log, summary, json.dumps(sent)):
                     self.assertNotIn(OPENJD_TOKEN, text)
                     self.assertNotIn(AWS_DEADLINE_TOKEN, text)
+
+
+PUBLISH_RUN = "https://github.com/example-owner/example-repo/actions/runs/42118768518"
+
+
+class TestTriggeringRun(TestCase):
+    """A workflow_run run follows Release: Publish; only a successful Publish may record a release and fan out."""
+
+    def run_step(self, env: dict[str, str]) -> tuple[int, str, str, list[str]]:
+        calls: list[str] = []
+
+        def github_api(token: str, base: str = "") -> Any:
+            def call(method: str, path: str, body: Any = None) -> Any:
+                calls.append(f"github {method} {path}")
+                return {"default_branch": "rt-ci"}
+            return call
+
+        def converse(ctx: Any, call: Any, **kwargs: Any) -> Any:
+            calls.append("gateway")
+            return rt.Conversation(plan={"actions": []}, ended="no train is busy")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = Path(tmp) / "summary.md"
+            summary.write_text("")
+            out = io.StringIO()
+            with mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_TOKEN": "t", "GITHUB_REF": "refs/heads/rt-ci",
+                                              "RT_GATEWAY_FUNCTION": "fn", "RT_GATEWAY_AUDIENCE": "aud",
+                                              "GITHUB_STEP_SUMMARY": str(summary), "RUNNER_TEMP": tmp,
+                                              "RT_DISPATCH_FILE": str(Path(tmp) / "dispatch.json"), **env}), \
+                    mock.patch.object(rt, "github_api", github_api), mock.patch.object(rt, "converse", converse), \
+                    mock.patch.object(rt, "invoke", lambda *a: calls.append("invoke") or {}), \
+                    contextlib.redirect_stdout(out):
+                code = rt.run()
+            return code, out.getvalue(), summary.read_text(), calls
+
+    def publish(self, conclusion: str) -> dict[str, str]:
+        return {"GITHUB_EVENT_NAME": "workflow_run", "RT_TRIGGER_CONCLUSION": conclusion,
+                "RT_TRIGGER_RUN_URL": PUBLISH_RUN}
+
+    def test_a_failed_publish_skips_the_gateway_and_warns(self) -> None:
+        code, log, summary, calls = self.run_step(self.publish("failure"))
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, [])
+        warnings = [line for line in log.splitlines() if line.startswith("::warning::")]
+        self.assertEqual(len(warnings), 1)
+        self.assertIn(PUBLISH_RUN, warnings[0])
+        self.assertIn("failure", warnings[0])
+        self.assertIn(PUBLISH_RUN, summary)
+        self.assertIn("failure", summary)
+
+    def test_a_cancelled_publish_skips_the_gateway_and_warns(self) -> None:
+        code, log, summary, calls = self.run_step(self.publish("cancelled"))
+        self.assertEqual((code, calls), (0, []))
+        self.assertIn(f"::warning::Release: Publish run {PUBLISH_RUN} concluded cancelled", log)
+        self.assertIn("cancelled", summary)
+
+    def test_a_missing_conclusion_is_not_a_success(self) -> None:
+        code, log, _, calls = self.run_step(self.publish(""))
+        self.assertEqual((code, calls), (0, []))
+        self.assertIn("::warning::", log)
+
+    def test_a_successful_publish_asks_the_gateway(self) -> None:
+        code, log, _, calls = self.run_step(self.publish("success"))
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, ["github GET /repos/example-owner/example-repo", "gateway"])
+        self.assertNotIn("::warning::", log)
+
+    def test_other_events_ignore_the_conclusion(self) -> None:
+        for event in ("push", "workflow_dispatch", "schedule"):
+            with self.subTest(event=event):
+                code, log, _, calls = self.run_step({"GITHUB_EVENT_NAME": event, "RT_TRIGGER_CONCLUSION": "",
+                                                     "RT_TRIGGER_RUN_URL": ""})
+                self.assertEqual(code, 0)
+                self.assertEqual(calls[-1], "gateway")
+                self.assertNotIn("::warning::", log)
+
+    def test_the_dispatch_step_dispatches_nothing_after_a_failed_publish(self) -> None:
+        api_calls: list[str] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            dispatch_file = Path(tmp) / "dispatch.json"
+            dispatch_file.write_text(json.dumps({"allowed": [CLI], "targets": [TARGET]}))
+            out = io.StringIO()
+            with mock.patch.dict(os.environ, {"RT_DISPATCH_FILE": str(dispatch_file), "RT_DISPATCH_REPOS": CLI,
+                                              "RT_DISPATCH_TOKEN_OPENJOBDESCRIPTION": OPENJD_TOKEN,
+                                              "RT_GATEWAY_FUNCTION": "fn", "RT_GATEWAY_AUDIENCE": "aud",
+                                              "RUNNER_TEMP": tmp, **self.publish("failure")}), \
+                    mock.patch.object(rt, "github_api", lambda t, base="": api_calls.append(t)), \
+                    mock.patch.object(rt, "invoke", lambda *a: api_calls.append("invoke") or {}), \
+                    mock.patch.object(rt, "id_token", lambda audience: "id-t0ken"), \
+                    contextlib.redirect_stdout(out):
+                self.assertEqual(rt.run_dispatch(), 0)
+        self.assertEqual(api_calls, [])
+        self.assertIn("No downstream dispatches", out.getvalue())

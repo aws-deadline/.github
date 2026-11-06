@@ -8,6 +8,10 @@
 #   python3 release_train.py dispatch   the dispatch step: the caller's dispatch tokens only (see below)
 #
 # One run:
+#   0. On workflow_run, stop unless the Release: Publish run that triggered it concluded success: a failed or
+#      cancelled Publish released nothing, so the gateway is not asked (it would record the release and name the
+#      downstream repositories to start). The run warns with the run's URL and conclusion and exits 0. The gateway
+#      has no phase for this, so no Slack post is made; the warning is in the run's log and summary.
 #   1. Refuse unless the job runs on the repository's default branch (a workflow_run run does: GitHub runs it from
 #      the default branch, whichever branch the workflow it follows ran on).
 #   2. Mint a GitHub OIDC ID token for the gateway's audience and invoke the gateway (an AWS Lambda function,
@@ -783,7 +787,28 @@ def converse(ctx: Context, call: Callable[[dict[str, Any]], dict[str, Any]], *, 
     return conv
 
 
+def skipped_trigger() -> str:
+    """Why this run must not ask the gateway: the workflow_run it follows (Release: Publish) did not succeed. Empty
+    for any other event, and for a successful Publish. The workflow passes only the run's conclusion and URL."""
+    if os.environ.get("GITHUB_EVENT_NAME") != "workflow_run":
+        return ""
+    conclusion: str = os.environ.get("RT_TRIGGER_CONCLUSION", "")
+    if conclusion == "success":
+        return ""
+    url: str = os.environ.get("RT_TRIGGER_RUN_URL", "") or "(unknown run)"
+    return (f"Release: Publish run {url} concluded {conclusion or 'without a conclusion'}; the release train records "
+            "no release and dispatches no downstream repositories.")
+
+
 def run() -> int:
+    skipped: str = skipped_trigger()
+    if skipped:
+        print(f"::warning::{skipped}")
+        summary_file: str = os.environ.get("GITHUB_STEP_SUMMARY", "")
+        if summary_file:
+            with open(summary_file, "a", encoding="utf-8") as f:
+                f.write(f"{skipped}\n")
+        return 0
     repo: str = os.environ["GITHUB_REPOSITORY"]
     token: str = os.environ["GITHUB_TOKEN"]
     function: str = os.environ["RT_GATEWAY_FUNCTION"]
@@ -896,6 +921,10 @@ def dispatch(doc: dict[str, Any], tokens: dict[str, str], caller_repos: frozense
 
 
 def run_dispatch() -> int:
+    # The run step writes no fan-out after a failed Publish; this guards against a file left by anything else.
+    if skipped_trigger():
+        print("No downstream dispatches: the Release: Publish run this follows did not succeed.")
+        return 0
     path: str = os.environ.get("RT_DISPATCH_FILE", "")
     if not path or not os.path.isfile(path):
         print("No downstream dispatches.")

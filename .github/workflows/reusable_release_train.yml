@@ -16,7 +16,8 @@
 #   - the AWS role trusts only the subject repo:<owner>/<repo>:ref:refs/heads/<default branch>, which a
 #     pull_request run (from a fork or not) never has;
 #   - a workflow_run run is only a signal: it runs this workflow from the default branch and reads nothing of
-#     the run that triggered it (no artifact, no head ref, no event payload);
+#     the run that triggered it (no artifact, no head ref) but its conclusion and URL. Unless that run (Release:
+#     Publish) succeeded, the script asks the gateway nothing, so no release is recorded and nothing is dispatched;
 #   - the gateway verifies a second OIDC ID token and checks the repository, ref, event and this workflow
 #     (job_workflow_ref) itself, so one repository cannot act for another.
 #
@@ -140,6 +141,9 @@ jobs:
           RT_MODE: ${{ inputs.mode }}
           RT_WAIT_MINUTES: ${{ inputs.wait_minutes }}
           RT_DISPATCH_FILE: ${{ runner.temp }}/release-train-dispatch.json
+          # Set on workflow_run only: the triggering run's conclusion and URL (see skipped_trigger).
+          RT_TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RT_TRIGGER_RUN_URL: ${{ github.event.workflow_run.html_url }}
         run: python3 workflow-tooling/.github/scripts/release_train.py run
 
       # The only step that sees the dispatch tokens. It runs nothing but the script's dispatch command, which
@@ -154,4 +158,7 @@ jobs:
           RT_DISPATCH_FILE: ${{ runner.temp }}/release-train-dispatch.json
           RT_GATEWAY_FUNCTION: ${{ inputs.gateway_function }}
           RT_GATEWAY_AUDIENCE: ${{ inputs.gateway_audience }}
+          # Set on workflow_run only: the triggering run's conclusion and URL (see skipped_trigger).
+          RT_TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RT_TRIGGER_RUN_URL: ${{ github.event.workflow_run.html_url }}
         run: python3 workflow-tooling/.github/scripts/release_train.py dispatch
