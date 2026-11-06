@@ -37,7 +37,7 @@
 #        push_release_notes         one commit on top of such a PR's head, from a verified bundle: its parent must
 #                                   be the head the train reviewed, it may change CHANGELOG.md only, and it is pushed
 #                                   to bump/X.Y.Z with an exact lease on that head (a fast-forward; nothing else)
-#        comment_release_pr         a comment on such a PR (the review's change table, or why the notes were kept)
+#        comment_release_pr         a comment on such a PR (the notes' check results, or why the notes were kept)
 #      Actions of one request run in order; after a failure the rest of that request is skipped.
 #   4. Report the results with {"phase": "report"}.
 #   5. Wait while the gateway says a train of this repository is busy (a step is running, or a gate this run just
