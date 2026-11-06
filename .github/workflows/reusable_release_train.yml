@@ -1,0 +1,164 @@
+# The repo side of the OpenJD release train.
+#
+# The train itself (dependency bumps, gates, the fix agent, release notes, builds) runs in AWS and holds no
+# GitHub credential. This workflow is how it reaches the repository: every run asks the train's gateway (an
+# AWS Lambda function) what to do, performs the GitHub writes with this job's GITHUB_TOKEN, and reports back.
+# See .github/scripts/release_train.py for the actions and their checks.
+#
+# Callers run it on workflow_dispatch (an upstream repository's run dispatches it after a release, and a person
+# can), on push to their default branch (a merged bot PR is a push; that run reports the merge right away), on
+# workflow_run when the repository's own release workflow completes, and on a daily schedule that catches anything
+# those missed. A run that started or advanced a train stays while the train works (up to wait_minutes) and does
+# the train's next GitHub write itself, so AWS needs no GitHub credential to reach the repository. It never runs
+# for a pull request:
+#   - the job only starts for schedule, workflow_dispatch, push and workflow_run, and the script refuses any
+#     ref but the repository's default branch;
+#   - the AWS role trusts only the subject repo:<owner>/<repo>:ref:refs/heads/<default branch>, which a
+#     pull_request run (from a fork or not) never has;
+#   - a workflow_run run is only a signal: it runs this workflow from the default branch and reads nothing of
+#     the run that triggered it (no artifact, no head ref) but its conclusion and URL. Unless that run (Release:
+#     Publish) succeeded, the script asks the gateway nothing, so no release is recorded and nothing is dispatched;
+#   - the gateway verifies a second OIDC ID token and checks the repository, ref, event and this workflow
+#     (job_workflow_ref) itself, so one repository cannot act for another.
+#
+# Nothing from a pull request is checked out or executed. The only checkout is this workflow's own tooling
+# repository (for the script), without persisted credentials. A bot branch arrives as a git bundle whose size
+# and sha256 the train recorded; it is fetched into a bare repository, inspected, and pushed only to bot/*.
+#
+# PRs opened with GITHUB_TOKEN do not start their pull_request workflows on their own: a maintainer approves
+# the CI run, reviews and merges. The merge is the approval the train waits for.
+#
+# AWS: the role in the role_arn secret can do one thing, invoke the gateway function. Its ARN is a secret so
+# the account id is configured in one place.
+#
+# Downstream repositories: after a release, the gateway names the repositories whose release train should run
+# next. A separate step dispatches their release_train.yml (the only step that sees the dispatch tokens; it runs
+# only the script's dispatch command) after checking each one against the gateway's allowlist and the caller's
+# own dispatch_repos. There is one optional token per GitHub organization, chosen by the target's owner:
+# dispatch_token_openjd for OpenJobDescription/* and dispatch_token_aws_deadline for aws-deadline/*; a target
+# owned by anyone else is refused. Each should be a fine-grained token owned by a bot user with only
+# Actions: read and write on the target repositories. Without an organization's token its targets are skipped
+# (never dispatched with the other token), and those repositories' daily runs pick the release up.
+name: Release train
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: "The train's mode, from the caller's RELEASE_TRAIN_MODE variable (rehearsal or live). The gateway refuses a run whose mode differs from the train's."
+        required: true
+        type: string
+      aws_region:
+        description: "AWS region of the gateway function."
+        required: false
+        type: string
+        default: "us-west-2"
+      gateway_function:
+        description: "Name of the gateway Lambda function."
+        required: false
+        type: string
+        default: "rt-train-gateway"
+      gateway_audience:
+        description: "Audience of the OIDC ID token the gateway verifies."
+        required: false
+        type: string
+        default: "rt-train-gateway"
+      tooling_repository:
+        description: "Repository holding .github/scripts/release_train.py. A reusable workflow does not check out its own repository, so the caller names it; it defaults to this workflow's home and is overridden only for fork testing."
+        required: false
+        type: string
+        default: "aws-deadline/.github"
+      tooling_ref:
+        description: "Ref of tooling_repository to take the script from, matching the ref callers use for this workflow."
+        required: false
+        type: string
+        default: "mainline"
+      dispatch_repos:
+        description: "The owner/repo names (comma or space separated) whose release_train.yml this repository may dispatch after a release. A target must also be on the gateway's allowlist. Empty: no dispatches."
+        required: false
+        type: string
+        default: ""
+      wait_minutes:
+        description: "How long a run waits for its train's next handoff before leaving it to the next event or the daily run (at most 65)."
+        required: false
+        type: number
+        default: 60
+    secrets:
+      role_arn:
+        description: "ARN of the OIDC role that may invoke the gateway function."
+        required: true
+      dispatch_token_openjd:
+        description: "Optional fine-grained token (resource owner OpenJobDescription, Actions: read and write only) that may run release_train.yml in the OpenJobDescription repositories of dispatch_repos. Only the dispatch step receives it."
+        required: false
+      dispatch_token_aws_deadline:
+        description: "Optional fine-grained token (resource owner aws-deadline, Actions: read and write only) that may run release_train.yml in the aws-deadline repositories of dispatch_repos. Only the dispatch step receives it."
+        required: false
+
+# Callers grant, least privilege:
+#   contents: write       push bot/* branches; create tags and releases
+#   pull-requests: write  open and update the train's PRs, add their labels
+#   actions: write        dispatch the repo's own Release: Bump (live mode)
+#   id-token: write       the OIDC tokens for the AWS role and for the gateway
+# No admin scopes.
+permissions: {}
+
+jobs:
+  train:
+    name: Release train
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'workflow_run' }}
+    runs-on: ubuntu-latest
+    # The wait (at most 65 minutes) plus checkout, setup and the dispatch step.
+    timeout-minutes: 80
+    permissions:
+      contents: write # push bot/* branches; create tags and releases
+      pull-requests: write # open and update the train's PRs and their labels
+      actions: write # dispatch the repo's own Release: Bump (live mode)
+      id-token: write # OIDC tokens for the AWS role and the gateway
+    steps:
+      - name: Check out the release-train script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.tooling_repository }}
+          ref: ${{ inputs.tooling_ref }}
+          path: workflow-tooling
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+          submodules: false
+
+      - name: Configure AWS credentials (OIDC; may invoke the gateway only)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+          # Outlasts the job; the role's maximum session duration must allow it.
+          role-duration-seconds: 5400
+
+      - name: Run the release train's actions
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RT_GATEWAY_FUNCTION: ${{ inputs.gateway_function }}
+          RT_GATEWAY_AUDIENCE: ${{ inputs.gateway_audience }}
+          RT_MODE: ${{ inputs.mode }}
+          RT_WAIT_MINUTES: ${{ inputs.wait_minutes }}
+          RT_DISPATCH_FILE: ${{ runner.temp }}/release-train-dispatch.json
+          # Set on workflow_run only: the triggering run's conclusion and URL (see skipped_trigger).
+          RT_TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RT_TRIGGER_RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: python3 workflow-tooling/.github/scripts/release_train.py run
+
+      # The only step that sees the dispatch tokens. It runs nothing but the script's dispatch command, which
+      # may only POST .../actions/workflows/release_train.yml/dispatches for repositories on both lists, each
+      # with the token of its own organization.
+      - name: Dispatch the downstream release trains
+        if: ${{ !cancelled() }}
+        env:
+          RT_DISPATCH_TOKEN_OPENJOBDESCRIPTION: ${{ secrets.dispatch_token_openjd }}
+          RT_DISPATCH_TOKEN_AWS_DEADLINE: ${{ secrets.dispatch_token_aws_deadline }}
+          RT_DISPATCH_REPOS: ${{ inputs.dispatch_repos }}
+          RT_DISPATCH_FILE: ${{ runner.temp }}/release-train-dispatch.json
+          RT_GATEWAY_FUNCTION: ${{ inputs.gateway_function }}
+          RT_GATEWAY_AUDIENCE: ${{ inputs.gateway_audience }}
+          # Set on workflow_run only: the triggering run's conclusion and URL (see skipped_trigger).
+          RT_TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RT_TRIGGER_RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: python3 workflow-tooling/.github/scripts/release_train.py dispatch
