@@ -43,7 +43,8 @@ jobs:
           if changed_files:
               print(changed_files, end="")
               print(
-                  "::error::Installer definitions changed. Please verify whether any related "
-                  "internal changes are needed to reflect the changes in this PR."
+                  "::error::Installer definitions changed. Maintainers: review whether "
+                  "related installer definitions, compatibility text, packaging, or tests "
+                  "need corresponding updates."
               )
               raise SystemExit(1)
