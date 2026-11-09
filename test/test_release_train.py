@@ -721,6 +721,31 @@ class TestWaiting(TestCase):
         self.assertFalse(out.release_pr_seen)
         self.assertLessEqual(self.clock.now - 1000.0, rt.RELEASE_PR_WAIT_S + 20.0)
 
+    def test_every_planning_request_carries_the_schedule_and_the_weekly_variable(self) -> None:
+        self.ctx.schedule = "17 15 * * 1"
+        self.ctx.weekly_enabled = "false"
+        gateway = FakeGateway([plan_of([self.comment()]), plan_of()], reply={"advanced": ["t"]})
+        self.converse(gateway)
+        weekly = {"schedule": "17 15 * * 1", "weekly_enabled": "false"}
+        self.assertEqual(gateway.calls[0], {"phase": "plan", "mode": "rehearsal", **weekly})
+        self.assertEqual(gateway.calls[2], {"phase": "wait", "mode": "rehearsal", "after": "2026-11-05T10:00:00+00:00",
+                                            "advanced": ["t"], **weekly})
+        self.assertEqual(gateway.calls[3], {"phase": "plan", "mode": "rehearsal", "after": "2026-11-05T10:00:00+00:00",
+                                            "advanced": ["t"], **weekly})
+
+    def test_a_run_without_a_schedule_sends_empty_values(self) -> None:
+        gateway = FakeGateway([plan_of()])
+        self.converse(gateway)
+        self.assertEqual(gateway.calls, [{"phase": "plan", "mode": "rehearsal", "schedule": "", "weekly_enabled": ""}])
+
+    def test_a_report_carries_only_its_results(self) -> None:
+        self.ctx.schedule = "17 15 * * 1"
+        self.ctx.weekly_enabled = "true"
+        gateway = FakeGateway([plan_of([self.comment()])])
+        self.converse(gateway)
+        self.assertEqual(gateway.phases(), ["plan", "report"])
+        self.assertEqual(set(gateway.calls[1]), {"phase", "results"})
+
 
 class TestIdToken(TestCase):
     """The OIDC ID token for the gateway: a transient failure of the runner's token service is retried."""
@@ -1063,6 +1088,41 @@ class TestTriggeringRun(TestCase):
                 self.assertEqual(code, 0)
                 self.assertEqual(calls[-1], "gateway")
                 self.assertNotIn("::warning::", log)
+
+    def ctx_of(self, env: dict[str, str]) -> Any:
+        seen: list[Any] = []
+
+        def converse(ctx: Any, call: Any, **kwargs: Any) -> Any:
+            seen.append(ctx)
+            return rt.Conversation(plan={"actions": []}, ended="no train is busy")
+
+        with mock.patch.object(rt, "converse", converse), tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_TOKEN": "t",
+                                             "GITHUB_REF": "refs/heads/rt-ci", "RT_GATEWAY_FUNCTION": "fn",
+                                             "RT_GATEWAY_AUDIENCE": "aud", "RUNNER_TEMP": tmp, **env}), \
+                mock.patch.object(rt, "github_api", lambda t, base="": lambda *a, **k: {"default_branch": "rt-ci"}), \
+                contextlib.redirect_stdout(io.StringIO()):
+            os.environ.pop("GITHUB_STEP_SUMMARY", None)
+            self.assertEqual(rt.run(), 0)
+        (ctx,) = seen
+        return ctx
+
+    def test_a_scheduled_run_passes_its_cron_and_the_weekly_variable(self) -> None:
+        ctx = self.ctx_of({"GITHUB_EVENT_NAME": "schedule", "RT_SCHEDULE": "17 15 * * 1", "RT_WEEKLY_ENABLED": "false"})
+        self.assertEqual((ctx.schedule, ctx.weekly_enabled), ("17 15 * * 1", "false"))
+
+    def test_other_events_pass_an_empty_schedule(self) -> None:
+        for event in ("push", "workflow_dispatch"):
+            with self.subTest(event=event):
+                ctx = self.ctx_of({"GITHUB_EVENT_NAME": event, "RT_SCHEDULE": "", "RT_WEEKLY_ENABLED": ""})
+                self.assertEqual((ctx.schedule, ctx.weekly_enabled), ("", ""))
+
+    def test_an_unset_schedule_and_variable_are_empty(self) -> None:
+        with mock.patch.dict(os.environ):
+            os.environ.pop("RT_SCHEDULE", None)
+            os.environ.pop("RT_WEEKLY_ENABLED", None)
+            ctx = self.ctx_of({"GITHUB_EVENT_NAME": "workflow_dispatch"})
+        self.assertEqual((ctx.schedule, ctx.weekly_enabled), ("", ""))
 
     def test_the_dispatch_step_dispatches_nothing_after_a_failed_publish(self) -> None:
         api_calls: list[str] = []

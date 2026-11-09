@@ -16,7 +16,10 @@
 #      the default branch, whichever branch the workflow it follows ran on).
 #   2. Mint a GitHub OIDC ID token for the gateway's audience and invoke the gateway (an AWS Lambda function,
 #      reached with the credentials the workflow's OIDC role gave this job) with {"phase": "plan"}. The
-#      gateway learns the repository, ref and event from the signed token, not from anything sent here.
+#      gateway learns the repository, ref and event from the signed token, not from anything sent here. Every
+#      plan and wait request also carries "schedule" (the cron string of a schedule run, else empty) and
+#      "weekly_enabled" (the caller's RELEASE_TRAIN_WEEKLY variable, else empty) for the planned weekly
+#      release check; the gateway does not act on them yet.
 #   3. Validate every returned action and execute it:
 #        push                       fetch the default branch, download the git bundle from its presigned URL,
 #                                   check its size and sha256, fetch it, check the tip, that the base is on the
@@ -144,6 +147,11 @@ class Context:
     api: Callable[..., Any]
     download: Callable[[str, int], bytes]
     remote_url: str = ""
+    # Sent with every planning request (plan, wait) for the train's planned weekly release check: the cron string
+    # of a schedule run (empty for other events) and the caller's RELEASE_TRAIN_WEEKLY variable (empty if unset).
+    # The gateway ignores both for now.
+    schedule: str = ""
+    weekly_enabled: str = ""
     sleep: Callable[[float], None] = time.sleep
     pushed: dict[str, str] = field(default_factory=dict)
     _cloned: bool = False
@@ -721,7 +729,8 @@ def converse(ctx: Context, call: Callable[[dict[str, Any]], dict[str, Any]], *, 
     `call` sends one payload to the gateway (the ID token is added by the caller). GatewayError from the first
     plan or a report propagates; during the wait, MAX_GATEWAY_FAILURES failures in a row end it."""
     deadline: float = now() + max(0.0, min(wait_s, MAX_WAIT_S))
-    plan: dict[str, Any] = call({"phase": "plan", "mode": ctx.mode})
+    weekly: dict[str, str] = {"schedule": ctx.schedule, "weekly_enabled": ctx.weekly_enabled}
+    plan: dict[str, Any] = call({"phase": "plan", "mode": ctx.mode, **weekly})
     conv: Conversation = Conversation(plan=plan)
     after: str = ""
     advanced: list[str] = []
@@ -761,7 +770,7 @@ def converse(ctx: Context, call: Callable[[dict[str, Any]], dict[str, Any]], *, 
             if conv.waits and not repolled:
                 # A train that finished while this run waited may have deferred a release: poll once more.
                 repolled = True
-                plan = call({"phase": "plan", "mode": ctx.mode, "after": after, "advanced": advanced[-50:]})
+                plan = call({"phase": "plan", "mode": ctx.mode, "after": after, "advanced": advanced[-50:], **weekly})
                 continue
             conv.ended = "nothing to wait for"
             break
@@ -772,7 +781,7 @@ def converse(ctx: Context, call: Callable[[dict[str, Any]], dict[str, Any]], *, 
         sleep(poll_s)
         conv.waits += 1
         try:
-            plan = call({"phase": "wait", "mode": ctx.mode, "after": after, "advanced": advanced[-50:]})
+            plan = call({"phase": "wait", "mode": ctx.mode, "after": after, "advanced": advanced[-50:], **weekly})
             failures = 0
         except GatewayError as e:
             failures += 1
@@ -831,7 +840,8 @@ def run() -> int:
             return invoke(function, {**payload, "id_token": id_token(audience)}, workdir)
 
         ctx: Context = Context(repo=repo, default_branch=default_branch, token=token, mode=mode, workdir=workdir,
-                               api=api, download=download)
+                               api=api, download=download, schedule=os.environ.get("RT_SCHEDULE", ""),
+                               weekly_enabled=os.environ.get("RT_WEEKLY_ENABLED", ""))
         try:
             conv: Conversation = converse(ctx, call, wait_s=wait_s,
                                           dispatch_file=Path(dispatch_path) if dispatch_path else None)

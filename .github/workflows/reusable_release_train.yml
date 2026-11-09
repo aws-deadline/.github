@@ -8,9 +8,10 @@
 # Callers run it on workflow_dispatch (an upstream repository's run dispatches it after a release, and a person
 # can), on push to their default branch (a merged bot PR is a push; that run reports the merge right away), on
 # workflow_run when the repository's own release workflow completes, and on a daily schedule that catches anything
-# those missed. A run that started or advanced a train stays while the train works (up to wait_minutes) and does
-# the train's next GitHub write itself, so AWS needs no GitHub credential to reach the repository. It never runs
-# for a pull request:
+# those missed. A Monday schedule is for the train's planned weekly release check; until the gateway's weekly mode
+# exists it runs exactly like the daily one. A run that started or advanced a train stays while the train works
+# (up to wait_minutes) and does the train's next GitHub write itself, so AWS needs no GitHub credential to reach
+# the repository. It never runs for a pull request:
 #   - the job only starts for schedule, workflow_dispatch, push and workflow_run, and the script refuses any
 #     ref but the repository's default branch;
 #   - the AWS role trusts only the subject repo:<owner>/<repo>:ref:refs/heads/<default branch>, which a
@@ -144,6 +145,11 @@ jobs:
           # Set on workflow_run only: the triggering run's conclusion and URL (see skipped_trigger).
           RT_TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           RT_TRIGGER_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          # For the planned weekly release check: the cron string of a schedule run (empty for other events) and
+          # the caller's RELEASE_TRAIN_WEEKLY variable (false pauses it; empty if unset). The gateway ignores
+          # both until its weekly mode exists.
+          RT_SCHEDULE: ${{ github.event.schedule }}
+          RT_WEEKLY_ENABLED: ${{ vars.RELEASE_TRAIN_WEEKLY }}
         run: python3 workflow-tooling/.github/scripts/release_train.py run
 
       # The only step that sees the dispatch tokens. It runs nothing but the script's dispatch command, which
