@@ -28,7 +28,10 @@ on:
 jobs:
   Python:
     name: ${{ inputs.os }}, python ${{ inputs.python-version }}
-    runs-on: ${{ inputs.os }}
+    # ubuntu-latest (Ubuntu 26.04) has no Python 3.9 build in actions/setup-python, so
+    # Python 3.9 on ubuntu-latest runs on ubuntu-24.04. The job name keeps the caller's
+    # os input so required-check names don't change.
+    runs-on: ${{ (inputs.os == 'ubuntu-latest' && inputs.python-version == '3.9') && 'ubuntu-24.04' || inputs.os }}
     permissions:
       contents: read
     env:
@@ -56,7 +59,7 @@ jobs:
         ref: ${{ inputs.ref }}
 
     - name: setup ${{ inputs.os }}
-      if: inputs.os == 'ubuntu-latest'
+      if: startsWith(inputs.os, 'ubuntu')
       run: |
         sudo apt-get update
         sudo apt-get install -y libegl1 libdbus-1-3 libxkbcommon-x11-0 \
