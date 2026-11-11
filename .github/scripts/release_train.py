@@ -99,7 +99,8 @@ SHA256 = re.compile(r"[0-9a-f]{64}")
 ACTION_ID = re.compile(r"[A-Za-z0-9|_-]{1,200}")
 REHEARSAL_SUFFIX = "(release-train rehearsal, not an official release)"
 # The only labels the train asks for, with how they are created when missing.
-LABELS = {"agent-modified": ("d93f0b", "Contains commits written by the release train's fix agent; needs human review")}
+LABELS = {"agent-modified": ("d93f0b", "Contains commits written by the release train's fix agent; needs human review"),
+          "needs-human": ("b60205", "The release train's fix agent could not finish; a person must complete this PR")}
 DISPATCHABLE = frozenset({"release_bump.yml"})
 # Release: Bump's one input (the repositories' release_bump.yml).
 BUMP_INPUTS: dict[str, frozenset[str]] = {"force_version_bump": frozenset({"", "patch", "minor", "major"})}

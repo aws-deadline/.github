@@ -187,6 +187,8 @@ class TestValidate(TestCase):
             rt.validate({**pr, "base": "mainline"}, self.ctx)
         with self.assertRaisesRegex(rt.Refused, "labels must be among"):
             rt.validate({**pr, "labels": ["approved"]}, self.ctx)
+        self.assertEqual(rt.validate({**pr, "labels": ["agent-modified", "needs-human"]}, self.ctx)["labels"],
+                         ["agent-modified", "needs-human"])
         with self.assertRaisesRegex(rt.Refused, "one non-empty line"):
             rt.validate({**pr, "title": "a\nb"}, self.ctx)
 
@@ -360,6 +362,16 @@ class TestPullRequests(Repos):
         rt.do_open_or_update_pr({**action, "body": "b2", "labels": []}, self.ctx)
         self.assertEqual(len(self.api.prs), 1)
         self.assertEqual(self.api.prs[20]["body"], "b2")
+
+    def test_a_missing_needs_human_label_is_created_and_added(self) -> None:
+        self.ctx.pushed[BRANCH] = "a" * 40
+        action = {"kind": "open_or_update_pr", "id": "t|s|pr|0123456789abcdef|1", "branch": BRANCH, "base": "rt-ci",
+                  "title": "feat!: Require openjd-model 0.15", "body": "b", "labels": ["needs-human"]}
+        out = rt.do_open_or_update_pr(action, self.ctx)
+        self.assertEqual(out["labels"], ["needs-human"])
+        created = [c[2] for c in self.api.calls if c[:2] == ("POST", f"/repos/{REPO}/labels")]
+        self.assertEqual([c["name"] for c in created], ["needs-human"])
+        self.assertRegex(created[0]["color"], "^[0-9a-f]{6}$")
 
     def test_an_open_pr_into_another_base_is_refused(self) -> None:
         self.api.pr(7, base={"ref": "mainline"})
