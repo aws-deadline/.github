@@ -48,7 +48,7 @@ class FakeApi:
         self.prs[number] = {"number": number, "html_url": f"https://github.com/{REPO}/pull/{number}", "state": "open",
                             "merged": False, "merge_commit_sha": None, "labels": [],
                             "head": {"ref": branch, "sha": head, "repo": {"full_name": REPO}},
-                            "base": {"ref": "rt-ci"}, **fields}
+                            "base": {"ref": "trunk"}, **fields}
         return self.prs[number]
 
     def __call__(self, method: str, path: str, body: Any = None) -> Any:
@@ -104,28 +104,28 @@ class FakeApi:
 
 
 class Repos(TestCase):
-    """A local stand-in for the GitHub repository (rt-ci with history) and a train clone with a bot branch."""
+    """A local stand-in for the GitHub repository (trunk with history) and a train clone with a bot branch."""
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
         self.remote = self.tmp / "remote.git"
-        subprocess.run(["git", "init", "--bare", "-q", "-b", "rt-ci", str(self.remote)], check=True, env=ENV)
+        subprocess.run(["git", "init", "--bare", "-q", "-b", "trunk", str(self.remote)], check=True, env=ENV)
         self.work = self.tmp / "work"
-        subprocess.run(["git", "init", "-q", "-b", "rt-ci", str(self.work)], check=True, env=ENV)
+        subprocess.run(["git", "init", "-q", "-b", "trunk", str(self.work)], check=True, env=ENV)
         (self.work / "pyproject.toml").write_text('dependencies = ["openjd-model >= 0.14,< 0.15"]\n')
         (self.work / ".github").mkdir()
         (self.work / ".github" / "ci.yml").write_text("on: push\n")
         sh(self.work, "add", ".")
         sh(self.work, "commit", "-qm", "base")
         self.base = sh(self.work, "rev-parse", "HEAD")
-        sh(self.work, "push", "-q", str(self.remote), "rt-ci")
+        sh(self.work, "push", "-q", str(self.remote), "trunk")
         sh(self.work, "switch", "-qc", BRANCH)
         (self.work / "pyproject.toml").write_text('dependencies = ["openjd-model >= 0.15,< 0.16"]\n')
         sh(self.work, "commit", "-qam", "feat!: Require openjd-model 0.15")
         self.api = FakeApi()
         self.downloads: dict[str, bytes] = {}
-        self.ctx = rt.Context(repo=REPO, default_branch="rt-ci", token="", mode="rehearsal",
+        self.ctx = rt.Context(repo=REPO, default_branch="trunk", token="", mode="rehearsal",
                               workdir=self.tmp / "job", api=self.api,
                               download=lambda url, limit: self.downloads[url], remote_url=str(self.remote),
                               sleep=lambda s: None)
@@ -151,7 +151,7 @@ class Repos(TestCase):
 
 class TestValidate(TestCase):
     def setUp(self) -> None:
-        self.ctx = rt.Context(repo=REPO, default_branch="rt-ci", token="", mode="rehearsal", workdir=Path("/nonexistent"),
+        self.ctx = rt.Context(repo=REPO, default_branch="trunk", token="", mode="rehearsal", workdir=Path("/nonexistent"),
                               api=FakeApi(), download=lambda url, limit: b"")
 
     def push(self, **fields: Any) -> dict[str, Any]:
@@ -160,7 +160,7 @@ class TestValidate(TestCase):
 
     def test_only_bot_branches_are_pushed(self) -> None:
         self.assertEqual(rt.validate(self.push(), self.ctx)["branch"], BRANCH)
-        for branch in ("rt-ci", "mainline", "refs/heads/bot/x", "bot/../mainline", "bot/.hidden", "bot/x.lock",
+        for branch in ("trunk", "mainline", "refs/heads/bot/x", "bot/../mainline", "bot/.hidden", "bot/x.lock",
                        "bot/", "bots/x", "bot/x y"):
             with self.subTest(branch=branch), self.assertRaisesRegex(rt.Refused, "only bot/\\* branches"):
                 rt.validate(self.push(branch=branch), self.ctx)
@@ -180,10 +180,10 @@ class TestValidate(TestCase):
             rt.validate(self.push(bundle_bytes=rt.MAX_BUNDLE_BYTES + 1), self.ctx)
 
     def test_a_pr_targets_the_default_branch_with_known_labels_only(self) -> None:
-        pr = {"kind": "open_or_update_pr", "id": "a|b|pr|0123456789abcdef|1", "branch": BRANCH, "base": "rt-ci",
+        pr = {"kind": "open_or_update_pr", "id": "a|b|pr|0123456789abcdef|1", "branch": BRANCH, "base": "trunk",
               "title": "feat!: x", "body": "b", "labels": ["agent-modified"]}
-        self.assertEqual(rt.validate(pr, self.ctx)["base"], "rt-ci")
-        with self.assertRaisesRegex(rt.Refused, "base must be the default branch rt-ci"):
+        self.assertEqual(rt.validate(pr, self.ctx)["base"], "trunk")
+        with self.assertRaisesRegex(rt.Refused, "base must be the default branch trunk"):
             rt.validate({**pr, "base": "mainline"}, self.ctx)
         with self.assertRaisesRegex(rt.Refused, "labels must be among"):
             rt.validate({**pr, "labels": ["approved"]}, self.ctx)
@@ -213,13 +213,13 @@ class TestValidate(TestCase):
 
     def test_only_release_bump_is_dispatched_on_the_default_branch_in_live_mode(self) -> None:
         bump = {"kind": "dispatch_workflow", "id": "a|b|release_pr|0123456789abcdef|0", "workflow": "release_bump.yml",
-                "ref": "rt-ci", "inputs": {}}
+                "ref": "trunk", "inputs": {}}
         self.ctx.mode = "live"
         self.assertEqual(rt.validate(bump, self.ctx)["workflow"], "release_bump.yml")
-        self.assertEqual(rt.validate({**bump, "inputs": {"force_version_bump": "minor"}}, self.ctx)["ref"], "rt-ci")
+        self.assertEqual(rt.validate({**bump, "inputs": {"force_version_bump": "minor"}}, self.ctx)["ref"], "trunk")
         with self.assertRaisesRegex(rt.Refused, "may be dispatched"):
             rt.validate({**bump, "workflow": "release_publish.yml"}, self.ctx)
-        with self.assertRaisesRegex(rt.Refused, "only on the default branch rt-ci"):
+        with self.assertRaisesRegex(rt.Refused, "only on the default branch trunk"):
             rt.validate({**bump, "ref": "release"}, self.ctx)
         for inputs in ({"force_version_bump": "huge"}, {"other": "x"}, "minor"):
             with self.subTest(inputs=inputs), self.assertRaisesRegex(rt.Refused, "inputs"):
@@ -235,7 +235,7 @@ class TestValidate(TestCase):
             rt.validate(self.push(id="x;rm -rf /"), self.ctx)
         self.ctx.mode = "live"
         with self.assertRaisesRegex(rt.Refused, "may be dispatched"):
-            rt.validate({"kind": "dispatch_workflow", "id": "x", "workflow": "release_publish.yml", "ref": "rt-ci",
+            rt.validate({"kind": "dispatch_workflow", "id": "x", "workflow": "release_publish.yml", "ref": "trunk",
                          "inputs": {}}, self.ctx)
 
 
@@ -319,19 +319,19 @@ class TestPush(Repos):
         sh(self.work, "add", "more.txt")
         sh(self.work, "commit", "-qm", "fix: more")
         # The claimed base is a commit of the bot branch itself, so the guard would only see the last commit.
-        with self.assertRaisesRegex(rt.Refused, "not below both the tip and rt-ci"):
+        with self.assertRaisesRegex(rt.Refused, "not below both the tip and trunk"):
             rt.do_push({**self.bundle(), "base_sha": first}, self.ctx)
         self.assertEqual(self.remote_branch(), "")
 
     def test_a_bundle_needing_commits_the_default_branch_lacks_is_refused(self) -> None:
         action = self.bundle()
         empty = self.tmp / "empty.git"
-        subprocess.run(["git", "init", "--bare", "-q", "-b", "rt-ci", str(empty)], check=True, env=ENV)
+        subprocess.run(["git", "init", "--bare", "-q", "-b", "trunk", str(empty)], check=True, env=ENV)
         sh(self.work, "switch", "-q", "--orphan", "other")
         (self.work / "x").write_text("x\n")
         sh(self.work, "add", "x")
         sh(self.work, "commit", "-qm", "unrelated")
-        sh(self.work, "push", "-q", str(empty), "HEAD:rt-ci")
+        sh(self.work, "push", "-q", str(empty), "HEAD:trunk")
         self.ctx.remote_url = str(empty)
         with self.assertRaisesRegex(rt.Refused, "git bundle failed"):
             rt.do_push(action, self.ctx)
@@ -351,21 +351,21 @@ class TestPush(Repos):
 class TestPullRequests(Repos):
     def test_open_then_update_and_label(self) -> None:
         self.ctx.pushed[BRANCH] = "a" * 40
-        action = {"kind": "open_or_update_pr", "id": "t|s|pr|0123456789abcdef|1", "branch": BRANCH, "base": "rt-ci",
+        action = {"kind": "open_or_update_pr", "id": "t|s|pr|0123456789abcdef|1", "branch": BRANCH, "base": "trunk",
                   "title": "feat!: Require openjd-model 0.15", "body": "b", "labels": ["agent-modified"]}
         out = rt.do_open_or_update_pr(action, self.ctx)
         self.assertEqual((out["number"], out["state"], out["base"], out["head_sha"], out["labels"]),
-                         (20, "open", "rt-ci", "a" * 40, ["agent-modified"]))
+                         (20, "open", "trunk", "a" * 40, ["agent-modified"]))
         self.assertIn("agent-modified", self.api.labels)
         created = [c for c in self.api.calls if c[:2] == ("POST", f"/repos/{REPO}/pulls")]
-        self.assertEqual(created[0][2], {"title": action["title"], "body": "b", "head": BRANCH, "base": "rt-ci"})
+        self.assertEqual(created[0][2], {"title": action["title"], "body": "b", "head": BRANCH, "base": "trunk"})
         rt.do_open_or_update_pr({**action, "body": "b2", "labels": []}, self.ctx)
         self.assertEqual(len(self.api.prs), 1)
         self.assertEqual(self.api.prs[20]["body"], "b2")
 
     def test_a_missing_needs_human_label_is_created_and_added(self) -> None:
         self.ctx.pushed[BRANCH] = "a" * 40
-        action = {"kind": "open_or_update_pr", "id": "t|s|pr|0123456789abcdef|1", "branch": BRANCH, "base": "rt-ci",
+        action = {"kind": "open_or_update_pr", "id": "t|s|pr|0123456789abcdef|1", "branch": BRANCH, "base": "trunk",
                   "title": "feat!: Require openjd-model 0.15", "body": "b", "labels": ["needs-human"]}
         out = rt.do_open_or_update_pr(action, self.ctx)
         self.assertEqual(out["labels"], ["needs-human"])
@@ -375,8 +375,8 @@ class TestPullRequests(Repos):
 
     def test_an_open_pr_into_another_base_is_refused(self) -> None:
         self.api.pr(7, base={"ref": "mainline"})
-        with self.assertRaisesRegex(rt.Refused, "targets mainline, not rt-ci"):
-            rt.do_open_or_update_pr({"kind": "open_or_update_pr", "id": "x", "branch": BRANCH, "base": "rt-ci",
+        with self.assertRaisesRegex(rt.Refused, "targets mainline, not trunk"):
+            rt.do_open_or_update_pr({"kind": "open_or_update_pr", "id": "x", "branch": BRANCH, "base": "trunk",
                                      "title": "t", "body": "b", "labels": []}, self.ctx)
 
     def test_pr_status_reports_a_merge(self) -> None:
@@ -384,7 +384,7 @@ class TestPullRequests(Repos):
         out = rt.do_pr_status({"kind": "pr_status", "id": "x", "number": 20, "branch": BRANCH, "tip": "a" * 40},
                               self.ctx)
         self.assertEqual(out, {"number": 20, "url": f"https://github.com/{REPO}/pull/20", "state": "merged",
-                               "merged": True, "merge_sha": "c" * 40, "head_sha": "a" * 40, "base": "rt-ci",
+                               "merged": True, "merge_sha": "c" * 40, "head_sha": "a" * 40, "base": "trunk",
                                "labels": ["agent-modified"]})
 
     def test_pr_status_refuses_a_pr_that_is_not_a_bot_pr_of_this_repo(self) -> None:
@@ -418,7 +418,7 @@ class TestTags(Repos):
         tip = sh(self.work, "rev-parse", BRANCH)
         self.bundle()
         rt.do_push(self.bundle(), self.ctx)  # the commit exists on GitHub, but only on the bot branch
-        with self.assertRaisesRegex(rt.Refused, "not reachable from rt-ci"):
+        with self.assertRaisesRegex(rt.Refused, "not reachable from trunk"):
             rt.do_create_tag_and_prerelease(self.action(tip), self.ctx)
         self.assertNotIn("0.15.0", self.api.releases)
 
@@ -432,7 +432,7 @@ class TestExecute(Repos):
     def test_a_failed_push_skips_the_rest_of_its_request_only(self) -> None:
         push = {**self.bundle(), "bundle_sha256": "0" * 64}
         pr = {"kind": "open_or_update_pr", "id": "t|sessions|pr|0123456789abcdef|1", "branch": BRANCH,
-              "base": "rt-ci", "title": "t", "body": "b", "labels": []}
+              "base": "trunk", "title": "t", "body": "b", "labels": []}
         other = {"kind": "comment", "id": "u|cli|pr|0123456789abcdef|0", "number": 7, "body": "hello"}
         self.api.pr(7)
         results = rt.execute([push, pr, other], self.ctx)
@@ -455,7 +455,7 @@ class TestReleasePrNotes(Repos):
     def setUp(self) -> None:
         super().setUp()
         # The repo's Release: Bump workflow: bump/0.15.1 with a chore(release) commit, pushed and opened as a PR.
-        sh(self.work, "switch", "-q", "rt-ci")
+        sh(self.work, "switch", "-q", "trunk")
         sh(self.work, "switch", "-qc", "bump/0.15.1")
         (self.work / "CHANGELOG.md").write_text("## 0.15.1\n\n* generated\n")
         sh(self.work, "add", "CHANGELOG.md")
@@ -495,7 +495,7 @@ class TestReleasePrNotes(Repos):
         def api(method: str, path: str, body: Any = None) -> Any:
             if method == "GET" and "/pulls?" in path:
                 self.assertIn("state=open", path)
-                self.assertIn("base=rt-ci", path)
+                self.assertIn("base=trunk", path)
                 return list(self.api.prs.values())
             return original(method, path, body)
 
@@ -527,7 +527,7 @@ class TestReleasePrNotes(Repos):
     def test_only_a_release_pr_branch_and_rt_notes_bundle_are_admitted(self) -> None:
         action = self.notes()
         for bad, why in (({"branch": BRANCH}, "only a bump/X.Y.Z release PR"),
-                         ({"branch": "rt-ci"}, "only a bump/X.Y.Z release PR"),
+                         ({"branch": "trunk"}, "only a bump/X.Y.Z release PR"),
                          ({"bundle_branch": "bump/0.15.1"}, "rt-notes/X.Y.Z"),
                          ({"bundle_url": "https://example.com/x"}, "https S3 URL")):
             with self.subTest(bad=bad):
@@ -611,7 +611,7 @@ class TestWaiting(TestCase):
         self.tmp = Path(self._tmp.name)
         self.api = FakeApi()
         self.api.pr(7)
-        self.ctx = rt.Context(repo=REPO, default_branch="rt-ci", token="", mode="rehearsal", workdir=self.tmp,
+        self.ctx = rt.Context(repo=REPO, default_branch="trunk", token="", mode="rehearsal", workdir=self.tmp,
                               api=self.api, download=lambda url, limit: b"")
         self.clock = Clock()
         self.dispatch_file = self.tmp / "dispatch.json"
@@ -698,7 +698,7 @@ class TestWaiting(TestCase):
 
     def test_fanout_targets_are_collected_for_the_dispatch_step(self) -> None:
         target = {"key": "DISPATCH#release#example-owner/cli#openjd-sessions#0.15.2", "repo": "example-owner/cli",
-                  "workflow": "release_train.yml", "ref": "rt-ci", "reason": "openjd-sessions 0.15.2 released"}
+                  "workflow": "release_train.yml", "ref": "trunk", "reason": "openjd-sessions 0.15.2 released"}
         gateway = FakeGateway([plan_of(busy=True), plan_of(dispatch={"allowed": ["example-owner/cli"],
                                                                      "targets": [target]}), plan_of()])
         self.converse(gateway)
@@ -832,7 +832,7 @@ class TestIdToken(TestCase):
 class DispatchApi:
     """GitHub as the dispatch step sees it, with the dispatch token."""
 
-    def __init__(self, default_branch: str = "rt-ci", status: int = 204) -> None:
+    def __init__(self, default_branch: str = "trunk", status: int = 204) -> None:
         self.calls: list[tuple[str, str, Any]] = []
         self.default_branch = default_branch
         self.statuses = [status]
@@ -848,10 +848,10 @@ class DispatchApi:
 
 
 TARGET = {"key": "DISPATCH#release#OpenJobDescription/openjd-cli#openjd-sessions#0.15.2",
-          "repo": "OpenJobDescription/openjd-cli", "workflow": "release_train.yml", "ref": "rt-ci",
+          "repo": "OpenJobDescription/openjd-cli", "workflow": "release_train.yml", "ref": "trunk",
           "reason": "openjd-sessions 0.15.2 released"}
 WA_TARGET = {"key": "DISPATCH#release#aws-deadline/deadline-cloud-worker-agent#openjd-sessions#0.15.2",
-             "repo": "aws-deadline/deadline-cloud-worker-agent", "workflow": "release_train.yml", "ref": "rt-ci",
+             "repo": "aws-deadline/deadline-cloud-worker-agent", "workflow": "release_train.yml", "ref": "trunk",
              "reason": "openjd-sessions 0.15.2 released"}
 CLI = "OpenJobDescription/openjd-cli"
 WA = "aws-deadline/deadline-cloud-worker-agent"
@@ -879,7 +879,7 @@ class TestDispatchStep(TestCase):
         self.assertEqual(result, {"key": TARGET["key"], "repo": CLI, "ok": True, "status": 204,
                                   "outcome": "dispatched", "error": ""})
         self.assertEqual(self.api.calls, [("GET", f"/repos/{CLI}", None), (
-            "POST", f"/repos/{CLI}/actions/workflows/release_train.yml/dispatches", {"ref": "rt-ci"})])
+            "POST", f"/repos/{CLI}/actions/workflows/release_train.yml/dispatches", {"ref": "trunk"})])
 
     def test_a_rehearsal_claim_naming_its_train_is_dispatched(self) -> None:
         (result,) = self.dispatch(targets=[{**TARGET, "key": TARGET["key"] + "#rt-gha-sessions-release-only-1"}])
@@ -1102,7 +1102,7 @@ class TestTriggeringRun(TestCase):
         def github_api(token: str, base: str = "") -> Any:
             def call(method: str, path: str, body: Any = None) -> Any:
                 calls.append(f"github {method} {path}")
-                return {"default_branch": "rt-ci"}
+                return {"default_branch": "trunk"}
             return call
 
         def converse(ctx: Any, call: Any, **kwargs: Any) -> Any:
@@ -1113,7 +1113,7 @@ class TestTriggeringRun(TestCase):
             summary = Path(tmp) / "summary.md"
             summary.write_text("")
             out = io.StringIO()
-            with mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_TOKEN": "t", "GITHUB_REF": "refs/heads/rt-ci",
+            with mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_TOKEN": "t", "GITHUB_REF": "refs/heads/trunk",
                                               "RT_GATEWAY_FUNCTION": "fn", "RT_GATEWAY_AUDIENCE": "aud",
                                               "GITHUB_STEP_SUMMARY": str(summary), "RUNNER_TEMP": tmp,
                                               "RT_DISPATCH_FILE": str(Path(tmp) / "dispatch.json"), **env}), \
@@ -1173,9 +1173,9 @@ class TestTriggeringRun(TestCase):
 
         with mock.patch.object(rt, "converse", converse), tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_TOKEN": "t",
-                                             "GITHUB_REF": "refs/heads/rt-ci", "RT_GATEWAY_FUNCTION": "fn",
+                                             "GITHUB_REF": "refs/heads/trunk", "RT_GATEWAY_FUNCTION": "fn",
                                              "RT_GATEWAY_AUDIENCE": "aud", "RUNNER_TEMP": tmp, **env}), \
-                mock.patch.object(rt, "github_api", lambda t, base="": lambda *a, **k: {"default_branch": "rt-ci"}), \
+                mock.patch.object(rt, "github_api", lambda t, base="": lambda *a, **k: {"default_branch": "trunk"}), \
                 contextlib.redirect_stdout(io.StringIO()):
             os.environ.pop("GITHUB_STEP_SUMMARY", None)
             self.assertEqual(rt.run(), 0)
