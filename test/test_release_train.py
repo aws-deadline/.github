@@ -1018,6 +1018,69 @@ class TestRunDispatch(TestCase):
 PUBLISH_RUN = "https://github.com/example-owner/example-repo/actions/runs/42118768518"
 
 
+class TestInvoke(TestCase):
+    """The gateway is named by its function name, or by its full ARN when it lives in another account."""
+
+    ARN = "arn:aws:lambda:us-east-2:111122223333:function:rt-train-gateway"
+
+    def invoke(self, function: str) -> tuple[dict[str, Any], list[list[str]]]:
+        argv: list[list[str]] = []
+
+        def fake_run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            argv.append(list(args))
+            Path(args[-1]).write_text(json.dumps({"actions": []}))
+            return subprocess.CompletedProcess(args, 0, stdout=json.dumps({"StatusCode": 200}), stderr="")
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(rt.subprocess, "run", fake_run):
+            reply = rt.invoke(function, {"phase": "plan"}, Path(tmp))
+        return reply, argv
+
+    def test_an_arn_is_invoked_as_is_in_its_own_region(self) -> None:
+        reply, argv = self.invoke(self.ARN)
+        self.assertEqual(reply, {"actions": []})
+        (args,) = argv
+        self.assertEqual(args[args.index("--function-name") + 1], self.ARN)
+        self.assertEqual(args[args.index("--region") + 1], "us-east-2")
+
+    def test_a_qualified_arn_keeps_its_qualifier(self) -> None:
+        _, argv = self.invoke(f"{self.ARN}:live")
+        (args,) = argv
+        self.assertEqual(args[args.index("--function-name") + 1], f"{self.ARN}:live")
+        self.assertEqual(args[args.index("--region") + 1], "us-east-2")
+
+    def test_a_function_name_uses_the_configured_region(self) -> None:
+        _, argv = self.invoke("rt-train-gateway")
+        (args,) = argv
+        self.assertEqual(args[args.index("--function-name") + 1], "rt-train-gateway")
+        self.assertNotIn("--region", args)
+
+    def test_a_malformed_gateway_is_refused_before_invoking(self) -> None:
+        for function in ("", "arn:aws:s3:::example-bucket", "arn:aws:lambda:us-east-2:1234:function:fn",
+                         "fn --debug", "arn:aws:lambda:us-east-2:111122223333:function:", "x" * 65):
+            with self.subTest(function=function), tempfile.TemporaryDirectory() as tmp, \
+                    mock.patch.object(rt.subprocess, "run") as run:
+                with self.assertRaisesRegex(rt.GatewayError, "gateway must be a Lambda function name or ARN"):
+                    rt.invoke(function, {"phase": "plan"}, Path(tmp))
+                run.assert_not_called()
+                self.assertEqual(list(Path(tmp).iterdir()), [])
+
+
+class TestWorkflowConfiguration(TestCase):
+    """The gateway and its region come from the caller's variables first, so no caller or code change is needed
+    to point the train at a gateway in another account."""
+
+    WORKFLOW = (Path(__file__).parents[1] / ".github" / "workflows" / "reusable_release_train.yml").read_text()
+
+    def test_both_steps_prefer_the_gateway_variable(self) -> None:
+        self.assertEqual(self.WORKFLOW.count(
+            "RT_GATEWAY_FUNCTION: ${{ vars.RELEASE_TRAIN_GATEWAY || inputs.gateway_function }}"), 2)
+        self.assertNotIn("RT_GATEWAY_FUNCTION: ${{ inputs.gateway_function }}", self.WORKFLOW)
+
+    def test_the_region_prefers_the_region_variable(self) -> None:
+        self.assertIn("aws-region: ${{ vars.RELEASE_TRAIN_REGION || inputs.aws_region }}", self.WORKFLOW)
+        self.assertNotIn("aws-region: ${{ inputs.aws_region }}", self.WORKFLOW)
+
+
 class TestTriggeringRun(TestCase):
     """A workflow_run run follows Release: Publish; only a successful Publish may record a release and fan out."""
 

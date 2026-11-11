@@ -15,7 +15,8 @@
 #   1. Refuse unless the job runs on the repository's default branch (a workflow_run run does: GitHub runs it from
 #      the default branch, whichever branch the workflow it follows ran on).
 #   2. Mint a GitHub OIDC ID token for the gateway's audience and invoke the gateway (an AWS Lambda function,
-#      reached with the credentials the workflow's OIDC role gave this job) with {"phase": "plan"}. The
+#      reached with the credentials the workflow's OIDC role gave this job, named by its function name or by its
+#      full ARN when it lives in another account; an ARN is invoked in its own region) with {"phase": "plan"}. The
 #      gateway learns the repository, ref and event from the signed token, not from anything sent here. Every
 #      plan and wait request also carries "schedule" (the cron string of a schedule run, else empty) and
 #      "weekly_enabled" (the caller's RELEASE_TRAIN_WEEKLY variable, else empty) for the planned weekly
@@ -113,6 +114,11 @@ REPO_NAME = re.compile(r"[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}")
 BRANCH_NAME = re.compile(r"(?!-)(?!.*\.\.)[A-Za-z0-9._/-]{1,100}(?<![./])")
 CLAIM_KEY = re.compile(r"DISPATCH#release#[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}#[A-Za-z0-9._:-]{1,100}#"
                        r"[0-9A-Za-z.+-]{1,40}(#[A-Za-z0-9-]{1,80})?")
+# The gateway: a function name (resolved in the AWS role's own account and region) or a full function ARN, which
+# names its account and region (the gateway may live in another account than the role).
+GATEWAY_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
+GATEWAY_ARN = re.compile(r"arn:aws[a-z-]*:lambda:([a-z]{2}(?:-[a-z]+)+-[0-9]):[0-9]{12}:function:[A-Za-z0-9_-]{1,64}"
+                         r"(?::[A-Za-z0-9$_-]{1,128})?")
 POLL_S = 20.0
 MAX_WAIT_S = 65 * 60.0
 RELEASE_PR_WAIT_S = 15 * 60.0
@@ -658,15 +664,27 @@ def id_token(audience: str, sleep: Callable[[float], None] = time.sleep) -> str:
     raise GatewayError(f"no OIDC ID token after {ID_TOKEN_ATTEMPTS} attempts: {reason}")
 
 
+def gateway_target(function: str) -> list[str]:
+    """The AWS CLI arguments that name the gateway: an ARN is invoked in the region it names, a bare name in the
+    region the job's AWS credentials were configured for."""
+    arn = GATEWAY_ARN.fullmatch(function)
+    if arn:
+        return ["--function-name", function, "--region", arn.group(1)]
+    if GATEWAY_NAME.fullmatch(function):
+        return ["--function-name", function]
+    raise GatewayError(f"the gateway must be a Lambda function name or ARN, not {function[:200]!r}")
+
+
 def invoke(function: str, payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
     """Invoke the gateway with the AWS CLI; the payload (it holds an ID token) stays in a private file."""
+    target: list[str] = gateway_target(function)
     src: Path = workdir / "gateway-in.json"
     out: Path = workdir / "gateway-out.json"
     fd: int = os.open(src, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
         json.dump(payload, f)
     try:
-        proc = subprocess.run(["aws", "lambda", "invoke", "--function-name", function, "--cli-binary-format",
+        proc = subprocess.run(["aws", "lambda", "invoke", *target, "--cli-binary-format",
                                "raw-in-base64-out", "--payload", f"fileb://{src}", str(out)],
                               capture_output=True, text=True, check=False, timeout=120)
     finally:

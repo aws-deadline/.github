@@ -30,7 +30,10 @@
 # the CI run, reviews and merges. The merge is the approval the train waits for.
 #
 # AWS: the role in the role_arn secret can do one thing, invoke the gateway function. Its ARN is a secret so
-# the account id is configured in one place.
+# the account id is configured in one place. The gateway may live in another account than the role: the caller's
+# RELEASE_TRAIN_GATEWAY variable (a repository or organization variable; a reusable workflow reads the caller's
+# variables) names it by its full ARN, and RELEASE_TRAIN_REGION the region for the role's credentials. Both fall
+# back to the gateway_function and aws_region inputs, so no account id is written in any workflow.
 #
 # Downstream repositories: after a release, the gateway names the repositories whose release train should run
 # next. A separate step dispatches their release_train.yml (the only step that sees the dispatch tokens; it runs
@@ -50,12 +53,12 @@ on:
         required: true
         type: string
       aws_region:
-        description: "AWS region of the gateway function."
+        description: "AWS region for the role's credentials and a gateway named without an ARN. The caller's RELEASE_TRAIN_REGION variable (repository or organization), when set, takes precedence."
         required: false
         type: string
         default: "us-west-2"
       gateway_function:
-        description: "Name of the gateway Lambda function."
+        description: "Name or full ARN of the gateway Lambda function. The caller's RELEASE_TRAIN_GATEWAY variable (repository or organization), when set, takes precedence; set it to the full ARN when the gateway is in another AWS account than the role. An ARN is invoked in the region it names."
         required: false
         type: string
         default: "rt-train-gateway"
@@ -130,14 +133,14 @@ jobs:
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ secrets.role_arn }}
-          aws-region: ${{ inputs.aws_region }}
+          aws-region: ${{ vars.RELEASE_TRAIN_REGION || inputs.aws_region }}
           # Outlasts the job; the role's maximum session duration must allow it.
           role-duration-seconds: 5400
 
       - name: Run the release train's actions
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          RT_GATEWAY_FUNCTION: ${{ inputs.gateway_function }}
+          RT_GATEWAY_FUNCTION: ${{ vars.RELEASE_TRAIN_GATEWAY || inputs.gateway_function }}
           RT_GATEWAY_AUDIENCE: ${{ inputs.gateway_audience }}
           RT_MODE: ${{ inputs.mode }}
           RT_WAIT_MINUTES: ${{ inputs.wait_minutes }}
@@ -162,7 +165,7 @@ jobs:
           RT_DISPATCH_TOKEN_AWS_DEADLINE: ${{ secrets.dispatch_token_aws_deadline }}
           RT_DISPATCH_REPOS: ${{ inputs.dispatch_repos }}
           RT_DISPATCH_FILE: ${{ runner.temp }}/release-train-dispatch.json
-          RT_GATEWAY_FUNCTION: ${{ inputs.gateway_function }}
+          RT_GATEWAY_FUNCTION: ${{ vars.RELEASE_TRAIN_GATEWAY || inputs.gateway_function }}
           RT_GATEWAY_AUDIENCE: ${{ inputs.gateway_audience }}
           # Set on workflow_run only: the triggering run's conclusion and URL (see skipped_trigger).
           RT_TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
