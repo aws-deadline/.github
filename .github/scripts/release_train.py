@@ -35,21 +35,13 @@
 #        comment                    a comment on a bot PR
 #        dispatch_workflow          live mode only: the repository's own Release: Bump (release_bump.yml) on the
 #                                   default branch, with GITHUB_TOKEN (a workflow_dispatch in the job's own repository)
-#      Live mode's release-notes review of the repo's own release PR (the one its Release: Bump workflow opens on
-#      bump/X.Y.Z, titled chore(release): X.Y.Z):
-#        find_release_pr            list those open PRs into the default branch (read only)
-#        push_release_notes         one commit on top of such a PR's head, from a verified bundle: its parent must
-#                                   be the head the train reviewed, it may change CHANGELOG.md only, and it is pushed
-#                                   to bump/X.Y.Z with an exact lease on that head (a fast-forward; nothing else)
-#        comment_release_pr         a comment on such a PR (the notes' check results, or why the notes were kept)
 #      Actions of one request run in order; after a failure the rest of that request is skipped.
 #   4. Report the results with {"phase": "report"}.
 #   5. Wait while the gateway says a train of this repository is busy (a step is running, or a gate this run just
 #      answered has not re-run yet): ask again with {"phase": "wait"} every POLL_S seconds and do the actions it
 #      hands out, up to the wait limit (wait_minutes). The next handoff of a train this run started or advanced
 #      thus reaches this same run, so nothing has to dispatch the repository and no runner sits idle between
-#      trains. After a dispatch of Release: Bump in live mode the run also waits (at most RELEASE_PR_WAIT_S) until
-#      the release PR it opens is found, so its notes review starts. A run that hits the limit stops; the next
+#      trains. A run that hits the limit stops; the next
 #      event (a merge's push, a dispatch) or the daily schedule picks the train up. Before it ends, a run that
 #      waited polls for releases once more (a train that finished may have deferred one).
 #   6. Write the downstream repositories the gateway asked to dispatch (fan-out after a release) to a file for the
@@ -86,14 +78,10 @@ from pathlib import Path
 from typing import Any, Callable
 
 KINDS = frozenset({"push", "open_or_update_pr", "pr_status", "create_tag_and_prerelease", "comment",
-                   "dispatch_workflow", "find_release_pr", "push_release_notes", "comment_release_pr"})
+                   "dispatch_workflow"})
 # A bot branch: path components of safe characters, none starting with "." or ending in ".lock".
 BOT_BRANCH = re.compile(r"bot/(?!\.)[A-Za-z0-9._+-]+(?<!\.lock)(/(?!\.)[A-Za-z0-9._+-]+(?<!\.lock))*")
 RELEASE_TAG = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
-# The repo's own release PR branch (Release: Bump), and the bundle branch a release-notes commit arrives on.
-RELEASE_PR_BRANCH = re.compile(r"bump/([0-9]+\.[0-9]+\.[0-9]+)")
-NOTES_BUNDLE_BRANCH = re.compile(r"rt-notes/[0-9]+\.[0-9]+\.[0-9]+")
-NOTES_FILES = frozenset({"CHANGELOG.md"})
 SHA = re.compile(r"[0-9a-f]{40}")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 ACTION_ID = re.compile(r"[A-Za-z0-9|_-]{1,200}")
@@ -122,7 +110,6 @@ GATEWAY_ARN = re.compile(r"arn:aws[a-z-]*:lambda:([a-z]{2}(?:-[a-z]+)+-[0-9]):[0
                          r"(?::[A-Za-z0-9$_-]{1,128})?")
 POLL_S = 20.0
 MAX_WAIT_S = 65 * 60.0
-RELEASE_PR_WAIT_S = 15 * 60.0
 MAX_GATEWAY_FAILURES = 3
 ID_TOKEN_ATTEMPTS = 3
 DISPATCH_ATTEMPTS = 3
@@ -260,26 +247,6 @@ def validate(action: Any, ctx: Context) -> dict[str, Any]:
     elif kind == "comment":
         _number(action)
         _str(action, "body", MAX_BODY)
-    elif kind in ("push_release_notes", "comment_release_pr"):
-        _number(action)
-        if not RELEASE_PR_BRANCH.fullmatch(_str(action, "branch", 200)):
-            raise Refused(f"{kind}: refusing branch {action['branch']!r}: only a bump/X.Y.Z release PR")
-        if kind == "comment_release_pr":
-            _str(action, "body", MAX_BODY)
-        else:
-            _sha(action, "tip")
-            _sha(action, "expected_head")
-            if not NOTES_BUNDLE_BRANCH.fullmatch(_str(action, "bundle_branch", 200)):
-                raise Refused("push_release_notes: the bundle branch must be rt-notes/X.Y.Z")
-            url = _str(action, "bundle_url", 4096)
-            host = urllib.parse.urlsplit(url).hostname or ""
-            if not url.startswith("https://") or not (host.endswith(".amazonaws.com") and ".s3" in f".{host}"):
-                raise Refused("push_release_notes: the bundle URL must be an https S3 URL")
-            if not SHA256.fullmatch(_str(action, "bundle_sha256", 64)):
-                raise Refused("push_release_notes: bundle_sha256 must be 64 hex characters")
-            size = action.get("bundle_bytes")
-            if not isinstance(size, int) or isinstance(size, bool) or not 0 < size <= MAX_BUNDLE_BYTES:
-                raise Refused(f"push_release_notes: bundle_bytes must be between 1 and {MAX_BUNDLE_BYTES}")
     elif kind == "dispatch_workflow":
         if _str(action, "workflow", 200) not in DISPATCHABLE:
             raise Refused(f"dispatch_workflow: only {sorted(DISPATCHABLE)} may be dispatched")
@@ -503,76 +470,6 @@ def do_comment(action: dict[str, Any], ctx: Context) -> dict[str, Any]:
     return {"url": str(made.get("html_url", ""))}
 
 
-def _release_pr(pr: dict[str, Any], ctx: Context) -> str:
-    """The version of an open release PR of this repo (bump/X.Y.Z into the default branch); Refused otherwise."""
-    head: dict[str, Any] = pr.get("head") or {}
-    match = RELEASE_PR_BRANCH.fullmatch(str(head.get("ref", "")))
-    if match is None or (head.get("repo") or {}).get("full_name") != ctx.repo or pr.get("state") != "open" \
-            or (pr.get("base") or {}).get("ref") != ctx.default_branch \
-            or pr.get("title") != f"chore(release): {match.group(1)}":
-        raise Refused(f"PR #{pr.get('number')} is not an open bump/X.Y.Z release PR of {ctx.repo}")
-    return match.group(1)
-
-
-def do_find_release_pr(action: dict[str, Any], ctx: Context) -> dict[str, Any]:
-    query: str = urllib.parse.urlencode({"state": "open", "base": ctx.default_branch, "per_page": "50"})
-    found: list[dict[str, Any]] = []
-    for pr in ctx.api("GET", f"/repos/{ctx.repo}/pulls?{query}") or []:
-        try:
-            _release_pr(pr, ctx)
-        except Refused:
-            continue
-        found.append({"number": int(pr["number"]), "head_ref": str(pr["head"]["ref"]),
-                      "head_sha": str(pr["head"]["sha"]), "title": str(pr["title"]), "url": str(pr["html_url"])})
-    return {"prs": found[:5]}
-
-
-def do_push_release_notes(action: dict[str, Any], ctx: Context) -> dict[str, Any]:
-    branch: str = action["branch"]
-    head: str = action["expected_head"]
-    tip: str = action["tip"]
-    pr: dict[str, Any] = ctx.api("GET", f"/repos/{ctx.repo}/pulls/{action['number']}")
-    _release_pr(pr, ctx)
-    if pr["head"]["ref"] != branch:
-        raise Refused(f"PR #{action['number']} is from {pr['head']['ref']}, not {branch}")
-    if pr["head"]["sha"] != head:
-        if pr["head"]["sha"] == tip:
-            return {"branch": branch, "sha": tip, "pushed": False}
-        raise Refused(f"push_release_notes: {branch} moved to {pr['head']['sha'][:12]} after the review of {head[:12]}")
-    ensure_clone(ctx)
-    ref: str = f"refs/heads/{branch}"
-    git(ctx.git_dir, "fetch", "--quiet", "--no-tags", ctx.remote_url, f"+{ref}:refs/rt/release-pr", token=ctx.token)
-    if git(ctx.git_dir, "rev-parse", "--verify", "refs/rt/release-pr^{commit}").stdout.strip() != head:
-        raise Refused(f"push_release_notes: {branch} is not at the reviewed head {head[:12]}")
-    data: bytes = ctx.download(action["bundle_url"], int(action["bundle_bytes"]))
-    verify_bundle(data, int(action["bundle_bytes"]), action["bundle_sha256"])
-    bundle: Path = ctx.workdir / f"{tip}.notes.bundle"
-    bundle.write_bytes(data)
-    git(ctx.git_dir, "bundle", "verify", "--quiet", str(bundle))
-    git(ctx.git_dir, "fetch", "--quiet", "--no-tags", str(bundle), f"+refs/heads/{action['bundle_branch']}:refs/rt/notes")
-    got: str = git(ctx.git_dir, "rev-parse", "--verify", "refs/rt/notes^{commit}").stdout.strip()
-    if got != tip:
-        raise Refused(f"push_release_notes: the bundle holds {got[:12]}, not the train's commit {tip[:12]}")
-    parents: list[str] = git(ctx.git_dir, "rev-list", "--parents", "-n", "1", tip).stdout.split()[1:]
-    changed: set[str] = set(git(ctx.git_dir, "diff", "--name-only", "-z", head, tip).stdout.split("\0")) - {""}
-    if parents != [head] or not changed or changed - NOTES_FILES or guarded_changes(ctx.git_dir, head, tip):
-        raise Refused("push_release_notes: refusing anything but one commit on the reviewed head that changes "
-                      "CHANGELOG.md only")
-    git(ctx.git_dir, "push", "--porcelain", "--no-verify", "--no-follow-tags", f"--force-with-lease={ref}:{head}",
-        ctx.remote_url, f"{tip}:{ref}", token=ctx.token)
-    return {"branch": branch, "sha": tip, "pushed": True}
-
-
-def do_comment_release_pr(action: dict[str, Any], ctx: Context) -> dict[str, Any]:
-    pr: dict[str, Any] = ctx.api("GET", f"/repos/{ctx.repo}/pulls/{action['number']}")
-    _release_pr(pr, ctx)
-    if pr["head"]["ref"] != action["branch"]:
-        raise Refused(f"PR #{action['number']} is from {pr['head']['ref']}, not {action['branch']}")
-    made: dict[str, Any] = ctx.api("POST", f"/repos/{ctx.repo}/issues/{action['number']}/comments",
-                                   {"body": action["body"]})
-    return {"url": str(made.get("html_url", ""))}
-
-
 def do_dispatch_workflow(action: dict[str, Any], ctx: Context) -> dict[str, Any]:
     # The repository's own Release: Bump, with this job's GITHUB_TOKEN: a workflow_dispatch in the job's own
     # repository is the one event that token may start. It opens the bump/X.Y.Z release PR.
@@ -584,8 +481,7 @@ def do_dispatch_workflow(action: dict[str, Any], ctx: Context) -> dict[str, Any]
 HANDLERS: dict[str, Callable[[dict[str, Any], Context], dict[str, Any]]] = {
     "push": do_push, "open_or_update_pr": do_open_or_update_pr, "pr_status": do_pr_status,
     "create_tag_and_prerelease": do_create_tag_and_prerelease, "comment": do_comment,
-    "dispatch_workflow": do_dispatch_workflow, "find_release_pr": do_find_release_pr,
-    "push_release_notes": do_push_release_notes, "comment_release_pr": do_comment_release_pr}
+    "dispatch_workflow": do_dispatch_workflow}
 
 
 def execute(actions: list[Any], ctx: Context) -> list[dict[str, Any]]:
@@ -729,7 +625,6 @@ class Conversation:
     allowed: list[str] = field(default_factory=list)
     targets: list[dict[str, Any]] = field(default_factory=list)
     waits: int = 0
-    release_pr_seen: bool = False
     ended: str = ""
     failed: bool = False
 
@@ -753,7 +648,6 @@ def converse(ctx: Context, call: Callable[[dict[str, Any]], dict[str, Any]], *, 
     conv: Conversation = Conversation(plan=plan)
     after: str = ""
     advanced: list[str] = []
-    release_pr_until: float = 0.0
     repolled: bool = False
     failures: int = 0
     while True:
@@ -761,10 +655,6 @@ def converse(ctx: Context, call: Callable[[dict[str, Any]], dict[str, Any]], *, 
         actions: list[Any] = list(plan.get("actions", []))
         results: list[dict[str, Any]] = execute(actions, ctx)
         conv.results += results
-        kinds: dict[str, str] = {str(a.get("id")): str(a.get("kind")) for a in actions if isinstance(a, dict)}
-        for r in results:
-            if r["ok"] and kinds.get(r["id"]) == "dispatch_workflow" and plan.get("notes_live"):
-                release_pr_until = now() + RELEASE_PR_WAIT_S
         moved: bool = False
         if results:
             reply: dict[str, Any] = call({"phase": "report", "results": results})
@@ -774,9 +664,6 @@ def converse(ctx: Context, call: Callable[[dict[str, Any]], dict[str, Any]], *, 
                 # Only a report that moved a train dates the gates it answered; a pr_status read moves nothing.
                 after = str(reply.get("at") or after)
             advanced = list(dict.fromkeys([*advanced, *[str(t) for t in reply.get("advanced", [])]]))
-            if reply.get("reviews"):
-                conv.release_pr_seen = True
-                release_pr_until = 0.0
         advanced = list(dict.fromkeys([*advanced, *[str(t) for t in plan.get("started", [])]]))
         dispatch: dict[str, Any] = dict(plan.get("dispatch") or {})
         conv.allowed = sorted(set(conv.allowed) | {str(r) for r in dispatch.get("allowed", [])})
@@ -784,8 +671,7 @@ def converse(ctx: Context, call: Callable[[dict[str, Any]], dict[str, Any]], *, 
         conv.targets += [t for t in dispatch.get("targets", []) if isinstance(t, dict) and str(t.get("key")) not in known]
         # The plan's busy predates this report: a train it just advanced is asked about again before the run ends.
         busy: bool = bool((plan.get("wait") or {}).get("busy")) or moved
-        expecting: bool = release_pr_until > now()
-        if not busy and not expecting:
+        if not busy:
             if conv.waits and not repolled:
                 # A train that finished while this run waited may have deferred a release: poll once more.
                 repolled = True
@@ -794,7 +680,7 @@ def converse(ctx: Context, call: Callable[[dict[str, Any]], dict[str, Any]], *, 
             conv.ended = "nothing to wait for"
             break
         if now() + poll_s > deadline:
-            conv.ended = f"the wait limit was reached ({(plan.get('wait') or {}).get('reason') or 'release PR'}); " \
+            conv.ended = f"the wait limit was reached ({(plan.get('wait') or {}).get('reason') or 'busy'}); " \
                          "the next event or the daily run picks it up"
             break
         sleep(poll_s)

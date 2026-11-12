@@ -446,104 +446,6 @@ class TestExecute(Repos):
         self.assertIn("unknown action kind", results[0]["error"])
 
 
-
-class TestReleasePrNotes(Repos):
-    """Live mode's release-notes review of the repo's own bump/X.Y.Z release PR."""
-
-    NOTES_URL = "https://example-bucket.s3.us-west-2.amazonaws.com/trains/t/handoff/sessions/notes_review/x.bundle?s=1"
-
-    def setUp(self) -> None:
-        super().setUp()
-        # The repo's Release: Bump workflow: bump/0.15.1 with a chore(release) commit, pushed and opened as a PR.
-        sh(self.work, "switch", "-q", "trunk")
-        sh(self.work, "switch", "-qc", "bump/0.15.1")
-        (self.work / "CHANGELOG.md").write_text("## 0.15.1\n\n* generated\n")
-        sh(self.work, "add", "CHANGELOG.md")
-        sh(self.work, "commit", "-qm", "chore(release): 0.15.1")
-        self.head = sh(self.work, "rev-parse", "HEAD")
-        sh(self.work, "push", "-q", str(self.remote), "bump/0.15.1")
-        self.api.pr(31, "bump/0.15.1", self.head, title="chore(release): 0.15.1")
-
-    def notes(self, *files: str) -> dict[str, Any]:
-        sh(self.work, "switch", "-q", "-C", "rt-notes/0.15.1", self.head)
-        for name in files or ("CHANGELOG.md",):
-            (self.work / name).parent.mkdir(parents=True, exist_ok=True)
-            (self.work / name).write_text("## 0.15.1\n\n* reviewed\n")
-            sh(self.work, "add", name)
-        sh(self.work, "commit", "-qm", "chore(release): review the 0.15.1 release notes")
-        tip = sh(self.work, "rev-parse", "HEAD")
-        out = self.tmp / "notes.bundle"
-        sh(self.work, "bundle", "create", "-q", str(out), "refs/heads/rt-notes/0.15.1", f"^{self.head}")
-        data = out.read_bytes()
-        self.downloads[self.NOTES_URL] = data
-        return {"kind": "push_release_notes", "id": "t|sessions|notes_review|0123456789abcdef|0",
-                "branch": "bump/0.15.1", "number": 31, "expected_head": self.head, "tip": tip,
-                "bundle_branch": "rt-notes/0.15.1", "bundle_url": self.NOTES_URL,
-                "bundle_sha256": hashlib.sha256(data).hexdigest(), "bundle_bytes": len(data)}
-
-    def remote_bump(self) -> str:
-        return subprocess.run(["git", "--git-dir", str(self.remote), "rev-parse", "refs/heads/bump/0.15.1"],
-                              capture_output=True, text=True, env=ENV).stdout.strip()
-
-    def test_find_lists_only_open_release_prs_of_this_repo(self) -> None:
-        self.api.pr(32, "bump/0.15.2", "b" * 40, title="chore: something else")
-        self.api.pr(33, BRANCH, "c" * 40, title="chore(release): 0.15.3")
-        self.api.pr(34, "bump/0.15.4", "d" * 40, title="chore(release): 0.15.4")
-        self.api.prs[34]["head"]["repo"] = {"full_name": "someone/fork"}
-        original = self.api.__call__
-
-        def api(method: str, path: str, body: Any = None) -> Any:
-            if method == "GET" and "/pulls?" in path:
-                self.assertIn("state=open", path)
-                self.assertIn("base=trunk", path)
-                return list(self.api.prs.values())
-            return original(method, path, body)
-
-        self.ctx.api = api
-        out = rt.do_find_release_pr({"kind": "find_release_pr", "id": "scan|sessions|0a1b2c3d"}, self.ctx)
-        self.assertEqual([p["number"] for p in out["prs"]], [31])
-        self.assertEqual(out["prs"][0]["head_sha"], self.head)
-
-    def test_a_reviewed_notes_commit_is_pushed_as_a_fast_forward(self) -> None:
-        action = self.notes()
-        out = rt.execute([action], self.ctx)
-        self.assertEqual(out, [{"id": action["id"], "ok": True, "outputs": {"branch": "bump/0.15.1",
-                                                                             "sha": action["tip"], "pushed": True}}])
-        self.assertEqual(self.remote_bump(), action["tip"])
-
-    def test_a_notes_commit_changing_another_file_is_refused(self) -> None:
-        action = self.notes("CHANGELOG.md", "src/x.py")
-        with self.assertRaisesRegex(rt.Refused, "CHANGELOG.md only"):
-            rt.do_push_release_notes(action, self.ctx)
-        self.assertEqual(self.remote_bump(), self.head)
-
-    def test_a_release_pr_that_moved_after_the_review_is_not_overwritten(self) -> None:
-        action = self.notes()
-        self.api.prs[31]["head"]["sha"] = "f" * 40
-        with self.assertRaisesRegex(rt.Refused, "moved to ffffffffffff after the review"):
-            rt.do_push_release_notes(action, self.ctx)
-        self.assertEqual(self.remote_bump(), self.head)
-
-    def test_only_a_release_pr_branch_and_rt_notes_bundle_are_admitted(self) -> None:
-        action = self.notes()
-        for bad, why in (({"branch": BRANCH}, "only a bump/X.Y.Z release PR"),
-                         ({"branch": "trunk"}, "only a bump/X.Y.Z release PR"),
-                         ({"bundle_branch": "bump/0.15.1"}, "rt-notes/X.Y.Z"),
-                         ({"bundle_url": "https://example.com/x"}, "https S3 URL")):
-            with self.subTest(bad=bad):
-                with self.assertRaisesRegex(rt.Refused, why):
-                    rt.validate({**action, **bad}, self.ctx)
-
-    def test_a_pr_that_is_not_the_release_pr_is_refused(self) -> None:
-        action = self.notes()
-        self.api.prs[31]["title"] = "feat: sneaky"
-        with self.assertRaisesRegex(rt.Refused, "not an open bump/X.Y.Z release PR"):
-            rt.do_push_release_notes(action, self.ctx)
-        with self.assertRaisesRegex(rt.Refused, "not an open bump/X.Y.Z release PR"):
-            rt.do_comment_release_pr({"kind": "comment_release_pr", "id": "x", "branch": "bump/0.15.1", "number": 31,
-                                      "body": "t"}, self.ctx)
-
-
 if __name__ == "__main__":
     unittest_main()
 
@@ -589,7 +491,7 @@ class FakeGateway:
 def plan_of(actions: list[dict[str, Any]] | None = None, busy: bool = False, **fields: Any) -> dict[str, Any]:
     return {"mode": "rehearsal", "node": "sessions", "actions": actions or [], "started": [], "deferred": {},
             "notes": [], "wait": {"busy": busy, "trains": ["t"] if busy else [], "reason": "t: running" if busy else ""},
-            "dispatch": {"allowed": [], "targets": []}, "notes_live": False, **fields}
+            "dispatch": {"allowed": [], "targets": []}, **fields}
 
 
 class Clock:
@@ -704,34 +606,6 @@ class TestWaiting(TestCase):
         self.converse(gateway)
         doc = rt.json.loads(self.dispatch_file.read_text())
         self.assertEqual(doc, {"allowed": ["example-owner/cli"], "targets": [target]})
-
-    def test_after_dispatching_release_bump_the_run_waits_for_its_release_pr(self) -> None:
-        self.ctx.mode = "live"
-        self.ctx.default_branch = "mainline"
-        bump = {"kind": "dispatch_workflow", "id": "t|sessions|release_pr|0123456789abcdef|0",
-                "workflow": "release_bump.yml", "ref": "mainline", "inputs": {}}
-        scan = {"kind": "find_release_pr", "id": "scan|sessions|0123abcd"}
-        found = {"reviews": ["rt-gha-notes-sessions-0-16-0-aaaaaaaaaaaa"]}
-        gateway = FakeGateway([plan_of([bump, scan], notes_live=True, mode="live"),
-                               plan_of([scan], notes_live=True, mode="live"),
-                               plan_of([scan], notes_live=True, mode="live"),
-                               plan_of(notes_live=True, mode="live")],
-                              reply=lambda p: found if len([c for c in gateway.calls if c["phase"] == "report"]) >= 3
-                              else {"advanced": ["t"]})
-        self.api.calls.clear()
-        out = self.converse(gateway)
-        self.assertEqual(gateway.phases(), ["plan", "report", "wait", "report", "wait", "report", "plan"])
-        self.assertTrue(out.release_pr_seen)
-
-    def test_the_wait_for_a_release_pr_is_bounded(self) -> None:
-        self.ctx.mode = "live"
-        self.ctx.default_branch = "mainline"
-        bump = {"kind": "dispatch_workflow", "id": "t|sessions|release_pr|0123456789abcdef|0",
-                "workflow": "release_bump.yml", "ref": "mainline", "inputs": {}}
-        gateway = FakeGateway([plan_of([bump], notes_live=True, mode="live"), plan_of(notes_live=True, mode="live")])
-        out = self.converse(gateway, wait_s=3600.0)
-        self.assertFalse(out.release_pr_seen)
-        self.assertLessEqual(self.clock.now - 1000.0, rt.RELEASE_PR_WAIT_S + 20.0)
 
     def test_every_planning_request_carries_the_schedule_and_the_weekly_variable(self) -> None:
         self.ctx.schedule = "17 15 * * 1"
