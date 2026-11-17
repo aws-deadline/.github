@@ -336,6 +336,22 @@ class TestPush(Repos):
         with self.assertRaisesRegex(rt.Refused, "git bundle failed"):
             rt.do_push(action, self.ctx)
 
+    def test_a_bundle_on_a_trunk_merged_after_the_job_cloned_is_pushed(self) -> None:
+        # The job cloned trunk at base; another merge moved trunk; the next train's bundle sits on the new tip.
+        self.assertEqual(rt.ensure_clone(self.ctx), self.base)
+        sh(self.work, "switch", "-q", "trunk")
+        (self.work / "CHANGELOG.md").write_text("## 0.15.0\n")
+        sh(self.work, "add", "CHANGELOG.md")
+        sh(self.work, "commit", "-qm", "chore(release): 0.15.0")
+        sh(self.work, "push", "-q", str(self.remote), "trunk")
+        self.base = sh(self.work, "rev-parse", "HEAD")
+        sh(self.work, "switch", "-q", "-C", BRANCH)
+        (self.work / "pyproject.toml").write_text('dependencies = ["openjd-model >= 0.16,< 0.17"]\n')
+        sh(self.work, "commit", "-qam", "feat!: Require openjd-model 0.16")
+        action = self.bundle()
+        self.assertEqual(rt.do_push(action, self.ctx), {"branch": BRANCH, "sha": action["tip"], "pushed": True})
+        self.assertEqual(self.remote_branch(), action["tip"])
+
     def test_a_branch_moved_by_someone_else_is_replaced_only_through_the_lease(self) -> None:
         action = self.bundle()
         rt.do_push(action, self.ctx)
@@ -421,6 +437,31 @@ class TestTags(Repos):
         with self.assertRaisesRegex(rt.Refused, "not reachable from trunk"):
             rt.do_create_tag_and_prerelease(self.action(tip), self.ctx)
         self.assertNotIn("0.15.0", self.api.releases)
+
+    def advance_trunk(self) -> str:
+        """Another merge lands on the remote's trunk after this job cloned it; returns the new tip."""
+        sh(self.work, "switch", "-q", "trunk")
+        (self.work / "CHANGELOG.md").write_text("## 0.15.0\n")
+        sh(self.work, "add", "CHANGELOG.md")
+        sh(self.work, "commit", "-qm", "chore(release): 0.15.0")
+        sh(self.work, "push", "-q", str(self.remote), "trunk")
+        return sh(self.work, "rev-parse", "HEAD")
+
+    def test_a_commit_merged_after_the_job_cloned_is_tagged(self) -> None:
+        # The job's first action clones trunk; the release PR is merged while the job waits for the next handoff.
+        self.assertEqual(rt.ensure_clone(self.ctx), self.base)
+        merged = self.advance_trunk()
+        out = rt.do_create_tag_and_prerelease(self.action(merged), self.ctx)
+        self.assertEqual(out["sha"], merged)
+        tag_call = next(c for c in self.api.calls if c[1] == f"/repos/{REPO}/git/tags")
+        self.assertEqual(tag_call[2]["object"], merged)
+        self.assertTrue(self.api.releases["0.15.0"]["prerelease"])
+
+    def test_ensure_clone_returns_the_current_tip_every_time(self) -> None:
+        self.assertEqual(rt.ensure_clone(self.ctx), self.base)
+        merged = self.advance_trunk()
+        self.assertEqual(rt.ensure_clone(self.ctx), merged)
+        self.assertEqual(rt.ensure_clone(self.ctx), merged)
 
     def test_a_tag_at_another_commit_is_refused(self) -> None:
         self.api.refs["/git/ref/tags/0.15.0"] = {"object": {"type": "commit", "sha": "f" * 40}}

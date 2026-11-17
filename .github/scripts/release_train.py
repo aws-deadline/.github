@@ -312,14 +312,17 @@ def guarded_changes(git_dir: Path, base: str, tip: str) -> list[str]:
 
 
 def ensure_clone(ctx: Context) -> str:
-    """A bare repository holding the default branch's full history; returns its tip."""
+    """A bare repository holding the default branch's full history; returns its current tip on the remote.
+
+    One job can wait an hour across several handoffs while people merge the train's PRs, so the branch is
+    fetched again on every call (incrementally, into the same repository); only the init is done once."""
     tracking: str = f"refs/remotes/origin/{ctx.default_branch}"
     if not ctx._cloned:
         subprocess.run(["git", "init", "--bare", "--quiet", str(ctx.git_dir)], env=_git_env(), check=True,
                        capture_output=True, timeout=60)
-        git(ctx.git_dir, "fetch", "--quiet", "--no-tags", ctx.remote_url,
-            f"+refs/heads/{ctx.default_branch}:{tracking}", token=ctx.token)
         ctx._cloned = True
+    git(ctx.git_dir, "fetch", "--quiet", "--no-tags", ctx.remote_url,
+        f"+refs/heads/{ctx.default_branch}:{tracking}", token=ctx.token)
     return git(ctx.git_dir, "rev-parse", "--verify", f"{tracking}^{{commit}}").stdout.strip()
 
 
