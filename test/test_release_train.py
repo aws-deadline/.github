@@ -1130,11 +1130,25 @@ class TestMode(TestCase):
 WORKFLOW_PATH = Path(__file__).parents[1] / ".github" / "workflows" / "reusable_release_train.yml"
 
 
-def skip_bash_on_windows(test: TestCase) -> None:
-    """The workflow's run steps are bash on ubuntu-latest. On a Windows runner `bash` is WSL's launcher, which has
-    no distribution installed, so those steps are tested on Linux and macOS only."""
+def _has_runner_bash() -> bool:
+    """Whether `bash` here is a bash 4 or later, like ubuntu-latest's (the steps use `${var,,}`). Windows' `bash`
+    is WSL's launcher, usually with no distribution installed, and macOS ships bash 3.2."""
     if os.name == "nt":
-        test.skipTest("the workflow's bash run steps are tested on Linux and macOS")
+        return False
+    try:
+        return subprocess.run(["bash", "-c", 'x=A; [ "${x,,}" = a ]'], capture_output=True, check=False,
+                              timeout=30).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+HAS_RUNNER_BASH: bool = _has_runner_bash()
+
+
+def skip_without_runner_bash(test: TestCase) -> None:
+    """The workflow's run steps are bash on ubuntu-latest; they are tested only where `bash` behaves the same."""
+    if not HAS_RUNNER_BASH:
+        test.skipTest("the workflow's bash run steps need bash 4 or later, as on ubuntu-latest")
 
 
 def _lines(text: str) -> list[str]:
@@ -1276,7 +1290,7 @@ class TestPublishGuard(TestCase):
         self.assertNotIn("needs", job)
 
     def notice(self, env: dict[str, str]) -> tuple[int, str, str]:
-        skip_bash_on_windows(self)
+        skip_without_runner_bash(self)
         step = self.wf.step("skipped", "Say why the release train skipped")
         script: str = _scalar(step["run"])
         with tempfile.TemporaryDirectory() as tmp:
@@ -1418,7 +1432,7 @@ class TestScriptSource(TestCase):
         self.assertEqual(_scalar(with_["sparse-checkout"]), ".github/scripts")
 
     def source_check(self, repository: str, sha: str) -> tuple[int, str]:
-        skip_bash_on_windows(self)
+        skip_without_runner_bash(self)
         step = self.wf.step("train", "Check the release-train script's source")
         self.assertEqual(_scalar(_children(step["env"])["RT_WORKFLOW_REPOSITORY"]), "${{ job.workflow_repository }}")
         self.assertEqual(_scalar(_children(step["env"])["RT_WORKFLOW_SHA"]), "${{ job.workflow_sha }}")
