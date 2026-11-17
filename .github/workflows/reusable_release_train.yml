@@ -24,8 +24,8 @@
 #   - the gateway verifies a second OIDC ID token and checks the repository, ref, event and this workflow
 #     (job_workflow_ref) itself, so one repository cannot act for another.
 #
-# Nothing from a pull request is checked out or executed. The only checkout is this workflow's own tooling
-# repository (for the script), without persisted credentials. A bot branch arrives as a git bundle whose size
+# Nothing from a pull request is checked out or executed. The only checkout is this workflow's own repository at
+# this workflow's own commit (for the script), without persisted credentials. A bot branch arrives as a git bundle whose size
 # and sha256 the train recorded; it is fetched into a bare repository, inspected, and pushed only to bot/*.
 #
 # PRs opened with GITHUB_TOKEN do not start their pull_request workflows on their own: a maintainer approves
@@ -69,16 +69,6 @@ on:
         required: false
         type: string
         default: "rt-train-gateway"
-      tooling_repository:
-        description: "Repository holding .github/scripts/release_train.py. A reusable workflow does not check out its own repository, so the caller names it; it defaults to this workflow's home and is overridden only for fork testing."
-        required: false
-        type: string
-        default: "aws-deadline/.github"
-      tooling_ref:
-        description: "Ref of tooling_repository to take the script from, matching the ref callers use for this workflow."
-        required: false
-        type: string
-        default: "mainline"
       release_branch:
         description: "The branch Release: Publish runs from. A workflow_run run whose Publish ran on another branch (or for another repository's commit, or did not succeed) is skipped with a notice."
         required: false
@@ -134,11 +124,27 @@ jobs:
       actions: write # dispatch the repo's own Release: Bump (live mode)
       id-token: write # OIDC tokens for the AWS role and the gateway
     steps:
+      # The script comes from exactly the repository and commit of this workflow file (the job context's
+      # workflow_repository and workflow_sha), so the AWS role's job_workflow_ref pin and the gateway's workflow
+      # check cover the script too, and no caller can name another source. An empty or malformed value fails here
+      # rather than letting actions/checkout fall back to the caller's repository.
+      - name: Check the release-train script's source
+        env:
+          RT_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          RT_WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          if ! [[ "$RT_WORKFLOW_REPOSITORY" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$ ]] ||
+             ! [[ "$RT_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The job context does not name this workflow's repository and commit; the release-train script has no trusted source."
+            exit 1
+          fi
+          echo "The release-train script comes from $RT_WORKFLOW_REPOSITORY at $RT_WORKFLOW_SHA, this workflow's own commit."
+
       - name: Check out the release-train script
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: ${{ inputs.tooling_repository }}
-          ref: ${{ inputs.tooling_ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: workflow-tooling
           sparse-checkout: .github/scripts
           persist-credentials: false

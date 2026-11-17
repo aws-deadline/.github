@@ -1361,3 +1361,49 @@ class TestAccountIdMasking(TestCase):
             with self.assertRaisesRegex(rt.GatewayError, r"^the gateway refused: no such role in \*\*\*$"):
                 rt.invoke("rt-train-gateway", {"phase": "plan"}, Path(tmp))
 
+class TestScriptSource(TestCase):
+    """The privileged script comes from exactly the repository and commit of this workflow file (job.workflow_*),
+    so the IAM role's job_workflow_ref pin covers the script too and no caller can choose another."""
+
+    wf = Workflow(WORKFLOW_PATH.read_text())
+
+    def test_no_caller_input_names_the_script_source(self) -> None:
+        self.assertNotIn("tooling_repository", self.wf.inputs())
+        self.assertNotIn("tooling_ref", self.wf.inputs())
+        self.assertNotIn("inputs.tooling", self.wf.text)
+
+    def test_the_script_is_checked_out_from_the_workflows_own_commit(self) -> None:
+        step = self.wf.step("train", "Check out the release-train script")
+        with_ = _children(step["with"])
+        self.assertEqual(_scalar(with_["repository"]), "${{ job.workflow_repository }}")
+        self.assertEqual(_scalar(with_["ref"]), "${{ job.workflow_sha }}")
+        self.assertEqual(_scalar(with_["persist-credentials"]), "false")
+        self.assertEqual(_scalar(with_["sparse-checkout"]), ".github/scripts")
+
+    def source_check(self, repository: str, sha: str) -> tuple[int, str]:
+        step = self.wf.step("train", "Check the release-train script's source")
+        self.assertEqual(_scalar(_children(step["env"])["RT_WORKFLOW_REPOSITORY"]), "${{ job.workflow_repository }}")
+        self.assertEqual(_scalar(_children(step["env"])["RT_WORKFLOW_SHA"]), "${{ job.workflow_sha }}")
+        proc = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", _scalar(step["run"])], capture_output=True,
+                              text=True, check=False, env={"PATH": os.environ["PATH"],
+                                                           "RT_WORKFLOW_REPOSITORY": repository,
+                                                           "RT_WORKFLOW_SHA": sha})
+        return proc.returncode, proc.stdout
+
+    def test_the_source_is_checked_before_the_checkout(self) -> None:
+        names: list[str] = [_scalar(s["name"]) for s in self.wf.steps("train")]
+        self.assertEqual(names[:2], ["Check the release-train script's source", "Check out the release-train script"])
+
+    def test_the_source_check_logs_the_repository_and_commit(self) -> None:
+        code, out = self.source_check("example-owner/.github", "a" * 40)
+        self.assertEqual(code, 0)
+        self.assertEqual(out.strip(), f"The release-train script comes from example-owner/.github at {'a' * 40}, "
+                                      "this workflow's own commit.")
+
+    def test_a_missing_or_malformed_source_fails_the_job(self) -> None:
+        for repository, sha in (("", "a" * 40), ("example-owner/.github", ""), ("example-owner/.github", "a" * 39),
+                                ("example-owner/.github", "main"), ("a/b/c", "a" * 40), ("-x/y", "a" * 40)):
+            with self.subTest(repository=repository, sha=sha):
+                code, out = self.source_check(repository, sha)
+                self.assertEqual(code, 1)
+                self.assertIn("::error::", out)
