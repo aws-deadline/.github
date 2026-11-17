@@ -1283,3 +1283,81 @@ class TestPublishGuard(TestCase):
         self.assertIn("it ran on branch a'[x](y)'b, not the release branch mainline.", summary)
         self.assertNotIn("`", summary)
 
+class TestAccountIdMasking(TestCase):
+    """The AWS account id stays out of the public log: configure-aws-credentials masks the role's account before
+    any step that names the gateway, and the script masks a gateway ARN and redacts account ids from AWS errors."""
+
+    wf = Workflow(WORKFLOW_PATH.read_text())
+    ARN = "arn:aws:lambda:us-east-2:111122223333:function:rt-train-gateway"
+
+    def test_configure_aws_credentials_masks_the_account_id(self) -> None:
+        step = self.wf.step("train", "Configure AWS credentials (OIDC; may invoke the gateway only)")
+        self.assertEqual(_scalar(_children(step["with"])["mask-aws-account-id"]), "true")
+
+    def test_no_step_names_the_gateway_before_the_account_id_is_masked(self) -> None:
+        names: list[str] = [_scalar(s["name"]) for s in self.wf.steps("train")]
+        configure: int = names.index("Configure AWS credentials (OIDC; may invoke the gateway only)")
+        users: list[int] = [i for i, s in enumerate(self.wf.steps("train"))
+                            if "RELEASE_TRAIN_GATEWAY" in "\n".join(line for v in s.values() for line in v)]
+        self.assertEqual(len(users), 2)
+        self.assertTrue(all(i > configure for i in users), (names, users))
+
+    def masks(self, function: str) -> list[str]:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rt.mask_gateway(function)
+        return out.getvalue().splitlines()
+
+    def test_a_gateway_arn_and_its_account_are_masked(self) -> None:
+        self.assertEqual(self.masks(self.ARN), [f"::add-mask::{self.ARN}", "::add-mask::111122223333"])
+
+    def test_a_gateway_name_needs_no_mask(self) -> None:
+        self.assertEqual(self.masks("rt-train-gateway"), [])
+
+    def test_both_steps_mask_the_gateway_first(self) -> None:
+        for command, entry in (("run", rt.run), ("dispatch", rt.run_dispatch)):
+            with self.subTest(command=command), tempfile.TemporaryDirectory() as tmp, \
+                    mock.patch.dict(os.environ, {"RT_GATEWAY_FUNCTION": self.ARN, "GITHUB_EVENT_NAME": "push",
+                                                 "RT_DISPATCH_FILE": str(Path(tmp) / "none.json"),
+                                                 "GITHUB_REF": "refs/heads/elsewhere", "GITHUB_REPOSITORY": REPO,
+                                                 "GITHUB_TOKEN": "t", "RT_GATEWAY_AUDIENCE": "aud"}), \
+                    mock.patch.object(rt, "github_api", lambda t, base="": lambda *a, **k: {"default_branch": "trunk"}):
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    entry()
+                self.assertEqual(out.getvalue().splitlines()[:2],
+                                 [f"::add-mask::{self.ARN}", "::add-mask::111122223333"])
+
+    def failed_invoke(self, stderr: str) -> str:
+        def fake_run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args, 254, stdout="", stderr=stderr)
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(rt.subprocess, "run", fake_run):
+            with self.assertRaisesRegex(rt.GatewayError, "aws lambda invoke failed") as caught:
+                rt.invoke("rt-train-gateway", {"phase": "plan"}, Path(tmp))
+        return str(caught.exception)
+
+    def test_aws_cli_errors_lose_their_account_ids(self) -> None:
+        text = self.failed_invoke(
+            "An error occurred (AccessDeniedException): User: arn:aws:sts::444455556666:assumed-role/r/GitHubActions "
+            "is not authorized to perform: lambda:InvokeFunction on resource: "
+            "arn:aws:lambda:us-west-2:111122223333:function:rt-train-gateway")
+        self.assertNotIn("444455556666", text)
+        self.assertNotIn("111122223333", text)
+        self.assertIn("arn:aws:sts::***:assumed-role/r/GitHubActions", text)
+        self.assertIn("arn:aws:lambda:us-west-2:***:function:rt-train-gateway", text)
+
+    def test_other_numbers_survive_the_redaction(self) -> None:
+        text = self.failed_invoke("Read timeout on endpoint after 60 seconds; request 1234567890123 x12345678901")
+        self.assertIn("1234567890123", text)
+        self.assertIn("x12345678901", text)
+
+    def test_a_gateway_refusal_loses_its_account_ids(self) -> None:
+        def fake_run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            Path(args[-1]).write_text(json.dumps({"errorMessage": "no such role in 444455556666"}))
+            return subprocess.CompletedProcess(args, 0, stdout=json.dumps({"FunctionError": "Unhandled"}), stderr="")
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(rt.subprocess, "run", fake_run):
+            with self.assertRaisesRegex(rt.GatewayError, r"^the gateway refused: no such role in \*\*\*$"):
+                rt.invoke("rt-train-gateway", {"phase": "plan"}, Path(tmp))
+

@@ -108,8 +108,10 @@ CLAIM_KEY = re.compile(r"DISPATCH#release#[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,10
 # The gateway: a function name (resolved in the AWS role's own account and region) or a full function ARN, which
 # names its account and region (the gateway may live in another account than the role).
 GATEWAY_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
-GATEWAY_ARN = re.compile(r"arn:aws[a-z-]*:lambda:([a-z]{2}(?:-[a-z]+)+-[0-9]):[0-9]{12}:function:[A-Za-z0-9_-]{1,64}"
+GATEWAY_ARN = re.compile(r"arn:aws[a-z-]*:lambda:([a-z]{2}(?:-[a-z]+)+-[0-9]):([0-9]{12}):function:[A-Za-z0-9_-]{1,64}"
                          r"(?::[A-Za-z0-9$_-]{1,128})?")
+# An AWS account id as it appears in AWS CLI errors (ARNs, "account 123456789012"); redacted before printing.
+ACCOUNT_ID = re.compile(r"(?<![0-9A-Za-z])[0-9]{12}(?![0-9A-Za-z])")
 POLL_S = 20.0
 MAX_WAIT_S = 65 * 60.0
 MAX_GATEWAY_FAILURES = 3
@@ -563,6 +565,22 @@ def id_token(audience: str, sleep: Callable[[float], None] = time.sleep) -> str:
     raise GatewayError(f"no OIDC ID token after {ID_TOKEN_ATTEMPTS} attempts: {reason}")
 
 
+def redact_account_ids(text: str) -> str:
+    """Text from AWS for the public log, with every account id replaced. ::add-mask:: hides only the accounts
+    this job registered (the role's, via configure-aws-credentials, and the gateway's, via mask_gateway), not
+    any other account an AWS error may name."""
+    return ACCOUNT_ID.sub("***", text)
+
+
+def mask_gateway(function: str) -> None:
+    """Mask a gateway ARN and its account id for the rest of the job (including the dispatch step's env). The
+    run step's own env is masked by configure-aws-credentials when the gateway is in the role's account."""
+    arn = GATEWAY_ARN.fullmatch(function)
+    if arn:
+        print(f"::add-mask::{function}")
+        print(f"::add-mask::{arn.group(2)}")
+
+
 def gateway_target(function: str) -> list[str]:
     """The AWS CLI arguments that name the gateway: an ARN is invoked in the region it names, a bare name in the
     region the job's AWS credentials were configured for."""
@@ -589,12 +607,13 @@ def invoke(function: str, payload: dict[str, Any], workdir: Path) -> dict[str, A
     finally:
         src.unlink(missing_ok=True)
     if proc.returncode != 0:
-        raise GatewayError(f"aws lambda invoke failed: {proc.stderr.strip()[-500:]}")
+        raise GatewayError(f"aws lambda invoke failed: {redact_account_ids(proc.stderr.strip())[-500:]}")
     meta: dict[str, Any] = json.loads(proc.stdout or "{}")
     reply: dict[str, Any] = json.loads(out.read_text() or "{}")
     out.unlink(missing_ok=True)
     if meta.get("FunctionError"):
-        raise GatewayError(f"the gateway refused: {str(reply.get('errorMessage', 'error'))[:500]}")
+        refusal: str = redact_account_ids(str(reply.get("errorMessage", "error")))
+        raise GatewayError(f"the gateway refused: {refusal[:500]}")
     return reply
 
 
@@ -717,6 +736,7 @@ def skipped_trigger() -> str:
 
 
 def run() -> int:
+    mask_gateway(os.environ.get("RT_GATEWAY_FUNCTION", ""))
     skipped: str = skipped_trigger()
     if skipped:
         print(f"::warning::{skipped}")
@@ -838,6 +858,7 @@ def dispatch(doc: dict[str, Any], tokens: dict[str, str], caller_repos: frozense
 
 
 def run_dispatch() -> int:
+    mask_gateway(os.environ.get("RT_GATEWAY_FUNCTION", ""))
     # The run step writes no fan-out after a failed Publish; this guards against a file left by anything else.
     if skipped_trigger():
         print("No downstream dispatches: the Release: Publish run this follows did not succeed.")

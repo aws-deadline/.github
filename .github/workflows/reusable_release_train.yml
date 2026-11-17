@@ -148,6 +148,9 @@ jobs:
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ secrets.role_arn }}
+          # Masks the role's account id for the rest of the job, before the steps below print the gateway (its
+          # ARN, when RELEASE_TRAIN_GATEWAY holds one, names the account) in their env.
+          mask-aws-account-id: true
           aws-region: ${{ vars.RELEASE_TRAIN_REGION || inputs.aws_region }}
           # Outlasts the job; the role's maximum session duration must allow it.
           role-duration-seconds: 5400
