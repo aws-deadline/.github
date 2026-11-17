@@ -252,7 +252,9 @@ class TestPush(Repos):
 
     def test_a_tampered_bundle_is_refused_before_anything_is_pushed(self) -> None:
         action = self.bundle()
-        self.downloads[URL] = self.downloads[URL][:-1] + b"\0"
+        data = self.downloads[URL]
+        # Flip every bit of the last byte, so the bundle always changes (a zero byte could already be there).
+        self.downloads[URL] = data[:-1] + bytes([data[-1] ^ 0xFF])
         with self.assertRaisesRegex(rt.Refused, "bundle sha256 mismatch"):
             rt.do_push(action, self.ctx)
         self.assertEqual(self.remote_branch(), "")
