@@ -1128,6 +1128,13 @@ class TestMode(TestCase):
 WORKFLOW_PATH = Path(__file__).parents[1] / ".github" / "workflows" / "reusable_release_train.yml"
 
 
+def skip_bash_on_windows(test: TestCase) -> None:
+    """The workflow's run steps are bash on ubuntu-latest. On a Windows runner `bash` is WSL's launcher, which has
+    no distribution installed, so those steps are tested on Linux and macOS only."""
+    if os.name == "nt":
+        test.skipTest("the workflow's bash run steps are tested on Linux and macOS")
+
+
 def _lines(text: str) -> list[str]:
     return [line for line in text.splitlines() if line.strip() and not line.lstrip().startswith("#")]
 
@@ -1267,6 +1274,7 @@ class TestPublishGuard(TestCase):
         self.assertNotIn("needs", job)
 
     def notice(self, env: dict[str, str]) -> tuple[int, str, str]:
+        skip_bash_on_windows(self)
         step = self.wf.step("skipped", "Say why the release train skipped")
         script: str = _scalar(step["run"])
         with tempfile.TemporaryDirectory() as tmp:
@@ -1408,6 +1416,7 @@ class TestScriptSource(TestCase):
         self.assertEqual(_scalar(with_["sparse-checkout"]), ".github/scripts")
 
     def source_check(self, repository: str, sha: str) -> tuple[int, str]:
+        skip_bash_on_windows(self)
         step = self.wf.step("train", "Check the release-train script's source")
         self.assertEqual(_scalar(_children(step["env"])["RT_WORKFLOW_REPOSITORY"]), "${{ job.workflow_repository }}")
         self.assertEqual(_scalar(_children(step["env"])["RT_WORKFLOW_SHA"]), "${{ job.workflow_sha }}")
