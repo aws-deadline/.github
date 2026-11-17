@@ -1,8 +1,10 @@
 # The repo side of the OpenJD release train.
 #
-# The train itself (dependency bumps, gates, the fix agent, release notes, builds) runs in AWS and holds no
-# GitHub credential. This workflow is how it reaches the repository: every run asks the train's gateway (an
-# AWS Lambda function) what to do, performs the GitHub writes with this job's GITHUB_TOKEN, and reports back.
+# The train itself (dependency bumps, test gates, the fix agent, builds) runs in AWS and holds no GitHub
+# credential. This workflow is how it reaches the repository: every run asks the train's gateway (an AWS Lambda
+# function) what to do, performs the GitHub writes with this job's GITHUB_TOKEN, and reports back. People review
+# and merge the train's PRs. Release notes come from the repository's own generator, and the repository's own
+# Release: Publish workflow tags and releases.
 # See .github/scripts/release_train.py for the actions and their checks.
 #
 # Callers run it on workflow_dispatch (an upstream repository's run dispatches it after a release, and a person
@@ -96,7 +98,8 @@ on:
         required: false
 
 # Callers grant, least privilege:
-#   contents: write       push bot/* branches; create tags and releases
+#   contents: write       push bot/* branches, and in rehearsal mode only a prerelease tag (Release:
+#                         Publish, not the train, tags and releases)
 #   pull-requests: write  open and update the train's PRs, add their labels
 #   actions: write        dispatch the repo's own Release: Bump (live mode)
 #   id-token: write       the OIDC tokens for the AWS role and for the gateway
@@ -119,7 +122,7 @@ jobs:
     # The wait (at most 65 minutes) plus checkout, setup and the dispatch step.
     timeout-minutes: 80
     permissions:
-      contents: write # push bot/* branches; create tags and releases
+      contents: write # push bot/* branches; a prerelease tag in rehearsal mode only
       pull-requests: write # open and update the train's PRs and their labels
       actions: write # dispatch the repo's own Release: Bump (live mode)
       id-token: write # OIDC tokens for the AWS role and the gateway
