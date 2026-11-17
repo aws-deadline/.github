@@ -41,8 +41,6 @@ class FakeApi:
         self.calls: list[tuple[str, str, Any]] = []
         self.prs: dict[int, dict[str, Any]] = {}
         self.labels: set[str] = set()
-        self.refs: dict[str, dict[str, Any]] = {}
-        self.releases: dict[str, dict[str, Any]] = {}
 
     def pr(self, number: int, branch: str = BRANCH, head: str = "a" * 40, **fields: Any) -> dict[str, Any]:
         self.prs[number] = {"number": number, "html_url": f"https://github.com/{REPO}/pull/{number}", "state": "open",
@@ -79,27 +77,6 @@ class FakeApi:
         if rest.startswith("/issues/") and rest.endswith("/labels"):
             self.prs[int(rest.split("/")[2])]["labels"] += [{"name": n} for n in body["labels"]]
             return []
-        if rest.startswith("/git/ref/tags/"):
-            if rest not in self.refs:
-                raise rt.ApiError(404, "Not Found")
-            return self.refs[rest]
-        if rest == "/git/tags":
-            return {"sha": "e" * 40}
-        if rest.startswith("/git/tags/"):
-            return {"object": {"sha": self.tag_target}}
-        if rest == "/git/refs":
-            self.refs[f"/git/ref/tags/{body['ref'].removeprefix('refs/tags/')}"] = {
-                "object": {"type": "tag", "sha": body["sha"]}}
-            return {}
-        if rest.startswith("/releases/tags/"):
-            tag = rest.split("/")[-1]
-            if tag not in self.releases:
-                raise rt.ApiError(404, "Not Found")
-            return self.releases[tag]
-        if rest == "/releases":
-            self.releases[body["tag_name"]] = {"html_url": f"https://github.com/{REPO}/releases/tag/{body['tag_name']}",
-                                               "name": body["name"], "prerelease": body["prerelease"]}
-            return self.releases[body["tag_name"]]
         raise AssertionError(f"unexpected {method} {path}")
 
 
@@ -125,7 +102,7 @@ class Repos(TestCase):
         sh(self.work, "commit", "-qam", "feat!: Require openjd-model 0.15")
         self.api = FakeApi()
         self.downloads: dict[str, bytes] = {}
-        self.ctx = rt.Context(repo=REPO, default_branch="trunk", token="", mode="rehearsal",
+        self.ctx = rt.Context(repo=REPO, default_branch="trunk", token="", mode="live",
                               workdir=self.tmp / "job", api=self.api,
                               download=lambda url, limit: self.downloads[url], remote_url=str(self.remote),
                               sleep=lambda s: None)
@@ -151,7 +128,7 @@ class Repos(TestCase):
 
 class TestValidate(TestCase):
     def setUp(self) -> None:
-        self.ctx = rt.Context(repo=REPO, default_branch="trunk", token="", mode="rehearsal", workdir=Path("/nonexistent"),
+        self.ctx = rt.Context(repo=REPO, default_branch="trunk", token="", mode="live", workdir=Path("/nonexistent"),
                               api=FakeApi(), download=lambda url, limit: b"")
 
     def push(self, **fields: Any) -> dict[str, Any]:
@@ -192,29 +169,9 @@ class TestValidate(TestCase):
         with self.assertRaisesRegex(rt.Refused, "one non-empty line"):
             rt.validate({**pr, "title": "a\nb"}, self.ctx)
 
-    def test_tags_are_x_y_z_and_rehearsal_releases_say_so(self) -> None:
-        tag = {"kind": "create_tag_and_prerelease", "id": "a|b|publish|0123456789abcdef|0", "tag": "0.15.0",
-               "sha": "a" * 40, "title": f"0.15.0 {rt.REHEARSAL_SUFFIX}", "notes": "n"}
-        self.assertEqual(rt.validate(tag, self.ctx)["tag"], "0.15.0")
-        for bad in ("v0.15.0", "0.15", "0.15.0rc1", "latest"):
-            with self.subTest(tag=bad), self.assertRaisesRegex(rt.Refused, "only X.Y.Z"):
-                rt.validate({**tag, "tag": bad}, self.ctx)
-        with self.assertRaisesRegex(rt.Refused, "rehearsal release must be titled"):
-            rt.validate({**tag, "title": "0.15.0"}, self.ctx)
-
-    def test_live_mode_never_creates_a_tag_or_release(self) -> None:
-        # In live mode the repository's own release workflow tags and releases; a rehearsal tag would collide.
-        tag = {"kind": "create_tag_and_prerelease", "id": "a|b|publish|0123456789abcdef|0", "tag": "0.15.0",
-               "sha": "a" * 40, "title": f"0.15.0 {rt.REHEARSAL_SUFFIX}", "notes": "n"}
-        for mode in ("live", "", "Rehearsal"):
-            self.ctx.mode = mode
-            with self.subTest(mode=mode), self.assertRaisesRegex(rt.Refused, "only in rehearsal mode"):
-                rt.validate(tag, self.ctx)
-
     def test_only_release_bump_is_dispatched_on_the_default_branch_in_live_mode(self) -> None:
         bump = {"kind": "dispatch_workflow", "id": "a|b|release_pr|0123456789abcdef|0", "workflow": "release_bump.yml",
                 "ref": "trunk", "inputs": {}}
-        self.ctx.mode = "live"
         self.assertEqual(rt.validate(bump, self.ctx)["workflow"], "release_bump.yml")
         self.assertEqual(rt.validate({**bump, "inputs": {"force_version_bump": "minor"}}, self.ctx)["ref"], "trunk")
         with self.assertRaisesRegex(rt.Refused, "may be dispatched"):
@@ -224,7 +181,7 @@ class TestValidate(TestCase):
         for inputs in ({"force_version_bump": "huge"}, {"other": "x"}, "minor"):
             with self.subTest(inputs=inputs), self.assertRaisesRegex(rt.Refused, "inputs"):
                 rt.validate({**bump, "inputs": inputs}, self.ctx)
-        self.ctx.mode = "rehearsal"
+        self.ctx.mode = "off"
         with self.assertRaisesRegex(rt.Refused, "only in live mode"):
             rt.validate(bump, self.ctx)
 
@@ -413,31 +370,7 @@ class TestPullRequests(Repos):
             rt.do_pr_status({"kind": "pr_status", "id": "x", "number": 6, "branch": BRANCH, "tip": "a" * 40}, self.ctx)
 
 
-class TestTags(Repos):
-    def action(self, sha: str) -> dict[str, Any]:
-        return {"kind": "create_tag_and_prerelease", "id": "t|s|publish|0123456789abcdef|0", "tag": "0.15.0",
-                "sha": sha, "title": f"0.15.0 {rt.REHEARSAL_SUFFIX}", "notes": "notes"}
-
-    def test_a_tag_and_prerelease_on_the_default_branch(self) -> None:
-        out = rt.do_create_tag_and_prerelease(self.action(self.base), self.ctx)
-        self.assertEqual(out, {"tag": "0.15.0", "sha": self.base,
-                               "release_url": f"https://github.com/{REPO}/releases/tag/0.15.0"})
-        tag_call = next(c for c in self.api.calls if c[1] == f"/repos/{REPO}/git/tags")
-        self.assertEqual(tag_call[2]["object"], self.base)
-        self.assertTrue(self.api.releases["0.15.0"]["prerelease"])
-        # Again: the tag (annotated, at this commit) and the release are already there.
-        self.api.tag_target = self.base
-        self.assertEqual(rt.do_create_tag_and_prerelease(self.action(self.base), self.ctx)["sha"], self.base)
-        self.assertEqual(len([c for c in self.api.calls if c[1] == f"/repos/{REPO}/releases"]), 1)
-
-    def test_a_commit_off_the_default_branch_is_not_tagged(self) -> None:
-        tip = sh(self.work, "rev-parse", BRANCH)
-        self.bundle()
-        rt.do_push(self.bundle(), self.ctx)  # the commit exists on GitHub, but only on the bot branch
-        with self.assertRaisesRegex(rt.Refused, "not reachable from trunk"):
-            rt.do_create_tag_and_prerelease(self.action(tip), self.ctx)
-        self.assertNotIn("0.15.0", self.api.releases)
-
+class TestEnsureClone(Repos):
     def advance_trunk(self) -> str:
         """Another merge lands on the remote's trunk after this job cloned it; returns the new tip."""
         sh(self.work, "switch", "-q", "trunk")
@@ -447,26 +380,11 @@ class TestTags(Repos):
         sh(self.work, "push", "-q", str(self.remote), "trunk")
         return sh(self.work, "rev-parse", "HEAD")
 
-    def test_a_commit_merged_after_the_job_cloned_is_tagged(self) -> None:
-        # The job's first action clones trunk; the release PR is merged while the job waits for the next handoff.
-        self.assertEqual(rt.ensure_clone(self.ctx), self.base)
-        merged = self.advance_trunk()
-        out = rt.do_create_tag_and_prerelease(self.action(merged), self.ctx)
-        self.assertEqual(out["sha"], merged)
-        tag_call = next(c for c in self.api.calls if c[1] == f"/repos/{REPO}/git/tags")
-        self.assertEqual(tag_call[2]["object"], merged)
-        self.assertTrue(self.api.releases["0.15.0"]["prerelease"])
-
     def test_ensure_clone_returns_the_current_tip_every_time(self) -> None:
         self.assertEqual(rt.ensure_clone(self.ctx), self.base)
         merged = self.advance_trunk()
         self.assertEqual(rt.ensure_clone(self.ctx), merged)
         self.assertEqual(rt.ensure_clone(self.ctx), merged)
-
-    def test_a_tag_at_another_commit_is_refused(self) -> None:
-        self.api.refs["/git/ref/tags/0.15.0"] = {"object": {"type": "commit", "sha": "f" * 40}}
-        with self.assertRaisesRegex(rt.Refused, "already names ffffffffffff"):
-            rt.do_create_tag_and_prerelease(self.action(self.base), self.ctx)
 
 
 class TestExecute(Repos):
@@ -530,7 +448,7 @@ class FakeGateway:
 
 
 def plan_of(actions: list[dict[str, Any]] | None = None, busy: bool = False, **fields: Any) -> dict[str, Any]:
-    return {"mode": "rehearsal", "node": "sessions", "actions": actions or [], "started": [], "deferred": {},
+    return {"mode": "live", "node": "sessions", "actions": actions or [], "started": [], "deferred": {},
             "notes": [], "wait": {"busy": busy, "trains": ["t"] if busy else [], "reason": "t: running" if busy else ""},
             "dispatch": {"allowed": [], "targets": []}, **fields}
 
@@ -554,7 +472,7 @@ class TestWaiting(TestCase):
         self.tmp = Path(self._tmp.name)
         self.api = FakeApi()
         self.api.pr(7)
-        self.ctx = rt.Context(repo=REPO, default_branch="trunk", token="", mode="rehearsal", workdir=self.tmp,
+        self.ctx = rt.Context(repo=REPO, default_branch="trunk", token="", mode="live", workdir=self.tmp,
                               api=self.api, download=lambda url, limit: b"")
         self.clock = Clock()
         self.dispatch_file = self.tmp / "dispatch.json"
@@ -654,16 +572,16 @@ class TestWaiting(TestCase):
         gateway = FakeGateway([plan_of([self.comment()]), plan_of()], reply={"advanced": ["t"]})
         self.converse(gateway)
         weekly = {"schedule": "17 15 * * 1", "weekly_enabled": "false"}
-        self.assertEqual(gateway.calls[0], {"phase": "plan", "mode": "rehearsal", **weekly})
-        self.assertEqual(gateway.calls[2], {"phase": "wait", "mode": "rehearsal", "after": "2026-11-05T10:00:00+00:00",
+        self.assertEqual(gateway.calls[0], {"phase": "plan", "mode": "live", **weekly})
+        self.assertEqual(gateway.calls[2], {"phase": "wait", "mode": "live", "after": "2026-11-05T10:00:00+00:00",
                                             "advanced": ["t"], **weekly})
-        self.assertEqual(gateway.calls[3], {"phase": "plan", "mode": "rehearsal", "after": "2026-11-05T10:00:00+00:00",
+        self.assertEqual(gateway.calls[3], {"phase": "plan", "mode": "live", "after": "2026-11-05T10:00:00+00:00",
                                             "advanced": ["t"], **weekly})
 
     def test_a_run_without_a_schedule_sends_empty_values(self) -> None:
         gateway = FakeGateway([plan_of()])
         self.converse(gateway)
-        self.assertEqual(gateway.calls, [{"phase": "plan", "mode": "rehearsal", "schedule": "", "weekly_enabled": ""}])
+        self.assertEqual(gateway.calls, [{"phase": "plan", "mode": "live", "schedule": "", "weekly_enabled": ""}])
 
     def test_a_report_carries_only_its_results(self) -> None:
         self.ctx.schedule = "17 15 * * 1"
@@ -732,7 +650,7 @@ class TestIdToken(TestCase):
                 rt.id_token("rt-train-gateway", sleep=self.sleeps.append)
                 raise AssertionError("unreachable: the token never arrives")
 
-            ctx: Any = rt.Context(repo=REPO, default_branch="mainline", token="t", mode="rehearsal",
+            ctx: Any = rt.Context(repo=REPO, default_branch="mainline", token="t", mode="live",
                                   workdir=Path(tempfile.mkdtemp()), api=lambda *a, **k: None, download=lambda u, n: b"")
             clock: list[float] = [0.0]
 
@@ -796,7 +714,7 @@ class TestDispatchStep(TestCase):
         self.assertEqual(self.api.calls, [("GET", f"/repos/{CLI}", None), (
             "POST", f"/repos/{CLI}/actions/workflows/release_train.yml/dispatches", {"ref": "trunk"})])
 
-    def test_a_rehearsal_claim_naming_its_train_is_dispatched(self) -> None:
+    def test_a_claim_naming_its_train_is_dispatched(self) -> None:
         (result,) = self.dispatch(targets=[{**TARGET, "key": TARGET["key"] + "#rt-gha-sessions-release-only-1"}])
         self.assertTrue(result["ok"])
 
@@ -1031,7 +949,8 @@ class TestTriggeringRun(TestCase):
             with mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_TOKEN": "t", "GITHUB_REF": "refs/heads/trunk",
                                               "RT_GATEWAY_FUNCTION": "fn", "RT_GATEWAY_AUDIENCE": "aud",
                                               "GITHUB_STEP_SUMMARY": str(summary), "RUNNER_TEMP": tmp,
-                                              "RT_DISPATCH_FILE": str(Path(tmp) / "dispatch.json"), **env}), \
+                                              "RT_DISPATCH_FILE": str(Path(tmp) / "dispatch.json"), "RT_MODE": "live",
+                                              **env}), \
                     mock.patch.object(rt, "github_api", github_api), mock.patch.object(rt, "converse", converse), \
                     mock.patch.object(rt, "invoke", lambda *a: calls.append("invoke") or {}), \
                     contextlib.redirect_stdout(out):
@@ -1089,7 +1008,8 @@ class TestTriggeringRun(TestCase):
         with mock.patch.object(rt, "converse", converse), tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_TOKEN": "t",
                                              "GITHUB_REF": "refs/heads/trunk", "RT_GATEWAY_FUNCTION": "fn",
-                                             "RT_GATEWAY_AUDIENCE": "aud", "RUNNER_TEMP": tmp, **env}), \
+                                             "RT_GATEWAY_AUDIENCE": "aud", "RUNNER_TEMP": tmp, "RT_MODE": "live",
+                                             **env}), \
                 mock.patch.object(rt, "github_api", lambda t, base="": lambda *a, **k: {"default_branch": "trunk"}), \
                 contextlib.redirect_stdout(io.StringIO()):
             os.environ.pop("GITHUB_STEP_SUMMARY", None)
@@ -1132,6 +1052,72 @@ class TestTriggeringRun(TestCase):
         self.assertEqual(api_calls, [])
         self.assertIn("No downstream dispatches", out.getvalue())
 
+
+
+class TestMode(TestCase):
+    """The train runs only in live mode; any other RELEASE_TRAIN_MODE fails the job before anything is asked."""
+
+    def run_step(self, mode: str | None, event: dict[str, str] | None = None) -> tuple[int, str, list[str]]:
+        calls: list[str] = []
+
+        def github_api(token: str, base: str = "") -> Any:
+            def call(method: str, path: str, body: Any = None) -> Any:
+                calls.append(f"github {method} {path}")
+                return {"default_branch": "trunk"}
+            return call
+
+        def converse(ctx: Any, call: Any, **kwargs: Any) -> Any:
+            calls.append(f"gateway {ctx.mode}")
+            return rt.Conversation(plan={"actions": []}, ended="no train is busy")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {"GITHUB_REPOSITORY": REPO, "GITHUB_TOKEN": "t", "GITHUB_REF": "refs/heads/trunk",
+                   "RT_GATEWAY_FUNCTION": "fn", "RT_GATEWAY_AUDIENCE": "aud", "RUNNER_TEMP": tmp,
+                   "GITHUB_EVENT_NAME": "workflow_dispatch", **(event or {})}
+            out = io.StringIO()
+            with mock.patch.dict(os.environ, env), mock.patch.object(rt, "github_api", github_api), \
+                    mock.patch.object(rt, "converse", converse), \
+                    mock.patch.object(rt, "invoke", lambda *a: calls.append("invoke") or {}), \
+                    contextlib.redirect_stdout(out):
+                os.environ.pop("GITHUB_STEP_SUMMARY", None)
+                os.environ.pop("RT_MODE", None)
+                if mode is not None:
+                    os.environ["RT_MODE"] = mode
+                code = rt.run()
+            return code, out.getvalue(), calls
+
+    def test_live_mode_asks_the_gateway(self) -> None:
+        code, _, calls = self.run_step("live")
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, [f"github GET /repos/{REPO}", "gateway live"])
+
+    def test_any_other_mode_fails_before_github_or_the_gateway_is_asked(self) -> None:
+        for mode in (None, "", "Live", " live", "live ", "off", "dry-run", "test", "release"):
+            with self.subTest(mode=mode):
+                code, log, calls = self.run_step(mode)
+                self.assertEqual(code, 1)
+                self.assertEqual(calls, [])
+                self.assertIn(f"::error::unknown release train mode {mode or ''!r}: only 'live' runs", log)
+
+    def test_an_unknown_mode_fails_even_after_a_failed_publish(self) -> None:
+        code, log, calls = self.run_step("dry-run", {"GITHUB_EVENT_NAME": "workflow_run",
+                                                     "RT_TRIGGER_CONCLUSION": "failure", "RT_TRIGGER_RUN_URL": ""})
+        self.assertEqual((code, calls), (1, []))
+        self.assertNotIn("::warning::", log)
+
+    def test_the_train_cannot_create_a_tag_or_release(self) -> None:
+        # Release: Publish tags and releases after a person merges the release PR; the train has no such action.
+        self.assertEqual(rt.KINDS, {"push", "open_or_update_pr", "pr_status", "comment", "dispatch_workflow"})
+        ctx = rt.Context(repo=REPO, default_branch="trunk", token="", mode="live", workdir=Path("/nonexistent"),
+                         api=FakeApi(), download=lambda url, limit: b"")
+        for kind in ("create_tag", "create_release", "tag", "release"):
+            with self.subTest(kind=kind):
+                action = {"kind": kind, "id": "a|b|publish|0123456789abcdef|0", "tag": "0.15.0", "sha": "a" * 40,
+                          "title": "0.15.0", "notes": "n"}
+                (result,) = rt.execute([action], ctx)
+                self.assertEqual(result["ok"], False)
+                self.assertIn(f"unknown action kind {kind!r}", result["error"])
+        self.assertEqual(ctx.api.calls, [])
 
 # -- the reusable workflow's structure ---------------------------------------------
 #

@@ -53,7 +53,7 @@ on:
   workflow_call:
     inputs:
       mode:
-        description: "The train's mode, from the caller's RELEASE_TRAIN_MODE variable (rehearsal or live). The gateway refuses a run whose mode differs from the train's."
+        description: "The train's mode, from the caller's RELEASE_TRAIN_MODE variable. Only live runs; any other value fails the job before the gateway is asked. The gateway refuses a run whose mode differs from the train's."
         required: true
         type: string
       aws_region:
@@ -98,10 +98,9 @@ on:
         required: false
 
 # Callers grant, least privilege:
-#   contents: write       push bot/* branches, and in rehearsal mode only a prerelease tag (Release:
-#                         Publish, not the train, tags and releases)
+#   contents: write       push bot/* branches (Release: Publish, not the train, tags and releases)
 #   pull-requests: write  open and update the train's PRs, add their labels
-#   actions: write        dispatch the repo's own Release: Bump (live mode)
+#   actions: write        dispatch the repo's own Release: Bump
 #   id-token: write       the OIDC tokens for the AWS role and for the gateway
 # No admin scopes.
 permissions: {}
@@ -122,9 +121,9 @@ jobs:
     # The wait (at most 65 minutes) plus checkout, setup and the dispatch step.
     timeout-minutes: 80
     permissions:
-      contents: write # push bot/* branches; a prerelease tag in rehearsal mode only
+      contents: write # push bot/* branches
       pull-requests: write # open and update the train's PRs and their labels
-      actions: write # dispatch the repo's own Release: Bump (live mode)
+      actions: write # dispatch the repo's own Release: Bump
       id-token: write # OIDC tokens for the AWS role and the gateway
     steps:
       # The script comes from exactly the repository and commit of this workflow file (the job context's
