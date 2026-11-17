@@ -10,8 +10,10 @@
 # One run:
 #   0. On workflow_run, stop unless the Release: Publish run that triggered it concluded success: a failed or
 #      cancelled Publish released nothing, so the gateway is not asked (it would record the release and name the
-#      downstream repositories to start). The run warns with the run's URL and conclusion and exits 0. The gateway
-#      has no phase for this, so no Slack post is made; the warning is in the run's log and summary.
+#      downstream repositories to start). The workflow's job guard already skips such a run (and one for another
+#      repository's commit or another branch) with a notice; this is the second check. The run warns with the
+#      run's URL and conclusion and exits 0. The gateway has no phase for this, so no Slack post is made; the
+#      warning is in the run's log and summary.
 #   1. Refuse unless the job runs on the repository's default branch (a workflow_run run does: GitHub runs it from
 #      the default branch, whichever branch the workflow it follows ran on).
 #   2. Mint a GitHub OIDC ID token for the gateway's audience and invoke the gateway (an AWS Lambda function,

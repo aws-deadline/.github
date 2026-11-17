@@ -1090,3 +1090,196 @@ class TestTriggeringRun(TestCase):
                 self.assertEqual(rt.run_dispatch(), 0)
         self.assertEqual(api_calls, [])
         self.assertIn("No downstream dispatches", out.getvalue())
+
+
+# -- the reusable workflow's structure ---------------------------------------------
+#
+# The repository's tests use only the standard library, so the workflow is read with a small reader for the block
+# mappings and step lists GitHub workflows use (no flow collections or anchors beyond `{}`). It is enough to
+# address a job, a step and a key by path.
+
+WORKFLOW_PATH = Path(__file__).parents[1] / ".github" / "workflows" / "reusable_release_train.yml"
+
+
+def _lines(text: str) -> list[str]:
+    return [line for line in text.splitlines() if line.strip() and not line.lstrip().startswith("#")]
+
+
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def _children(lines: list[str]) -> dict[str, list[str]]:
+    """The keys of a block mapping, each with the lines below it (its value's block)."""
+    if not lines:
+        return {}
+    base: int = _indent(lines[0])
+    out: dict[str, list[str]] = {}
+    key: str = ""
+    for line in lines:
+        if _indent(line) == base and not line.lstrip().startswith("- "):
+            key, _, rest = line.strip().partition(":")
+            out[key] = [rest.strip()] if rest.strip() else []
+        elif key:
+            out[key].append(line)
+    return out
+
+
+def _scalar(value: list[str]) -> str:
+    """A key's scalar value, with a `|` block joined by newlines and a quoted string unquoted."""
+    if value and value[0][:1] in ("|", ">"):
+        body: list[str] = value[1:]
+        cut: int = min(_indent(line) for line in body)
+        if value[0].startswith(">"):
+            return " ".join(line.strip() for line in body)
+        return "\n".join(line[cut:] for line in body) + "\n"
+    (text,) = value
+    text = text.split(" #", 1)[0].strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+        text = text[1:-1]
+    return text
+
+
+def _items(lines: list[str]) -> list[list[str]]:
+    """The items of a block sequence, each re-indented as a block mapping."""
+    items: list[list[str]] = []
+    for line in lines:
+        stripped: str = line.lstrip(" ")
+        if stripped.startswith("- "):
+            items.append([" " * (_indent(line) + 2) + stripped[2:]])
+        elif items:
+            items[-1].append(line)
+    return items
+
+
+class Workflow:
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.top: dict[str, list[str]] = _children(_lines(text))
+
+    def job(self, name: str) -> dict[str, list[str]]:
+        return _children(_children(self.top["jobs"])[name])
+
+    def jobs(self) -> list[str]:
+        return list(_children(self.top["jobs"]))
+
+    def steps(self, job: str) -> list[dict[str, list[str]]]:
+        return [_children(item) for item in _items(self.job(job)["steps"])]
+
+    def step(self, job: str, name: str) -> dict[str, list[str]]:
+        (found,) = [s for s in self.steps(job) if _scalar(s["name"]) == name]
+        return found
+
+    def inputs(self) -> dict[str, dict[str, list[str]]]:
+        call: dict[str, list[str]] = _children(_children(self.top["on"])["workflow_call"])
+        return {k: _children(v) for k, v in _children(call["inputs"]).items()}
+
+
+def _expression(value: str) -> str:
+    """The body of a `${{ ... }}` expression, whitespace collapsed."""
+    text: str = value.strip()
+    if text.startswith("${{") and text.endswith("}}"):
+        text = text[3:-2]
+    return " ".join(text.split())
+
+
+# The guard every workflow_run run must pass, in the order the workflow writes it.
+PUBLISH_GUARD = ("github.event.workflow_run.conclusion == 'success' && "
+                 "github.event.workflow_run.head_repository.full_name == github.repository && "
+                 "github.event.workflow_run.head_branch == inputs.release_branch")
+
+
+class TestReaderOfTheWorkflow(TestCase):
+    """The small reader above, on a known document, so the structure tests below rest on it."""
+
+    DOC = ("on:\n  workflow_call:\n    inputs:\n      a:\n        default: \"x\"\n"
+           "jobs:\n  j:\n    if: ${{ a }}\n    permissions: {}\n    steps:\n      - name: one\n        run: |\n"
+           "          echo 1\n          echo 2\n      - name: two # c\n        with:\n          k: v # note\n")
+
+    def test_it_reads_jobs_steps_inputs_and_block_scalars(self) -> None:
+        wf = Workflow(self.DOC)
+        self.assertEqual(wf.jobs(), ["j"])
+        self.assertEqual(_scalar(wf.job("j")["if"]), "${{ a }}")
+        self.assertEqual(_scalar(wf.job("j")["permissions"]), "{}")
+        self.assertEqual([_scalar(s["name"]) for s in wf.steps("j")], ["one", "two"])
+        self.assertEqual(_scalar(wf.step("j", "one")["run"]), "echo 1\necho 2\n")
+        self.assertEqual(_scalar(_children(wf.step("j", "two")["with"])["k"]), "v")
+        self.assertEqual(_scalar(wf.inputs()["a"]["default"]), "x")
+
+
+class TestPublishGuard(TestCase):
+    """A workflow_run run follows Release: Publish. The job itself (before any OIDC token or AWS credential) runs
+    only for a successful Publish of this repository's own release branch; any other workflow_run gets a notice
+    job with no permissions instead."""
+
+    wf = Workflow(WORKFLOW_PATH.read_text())
+
+    def test_the_release_branch_input_defaults_to_mainline(self) -> None:
+        release_branch = self.wf.inputs()["release_branch"]
+        self.assertEqual(_scalar(release_branch["default"]), "mainline")
+        self.assertEqual(_scalar(release_branch["required"]), "false")
+        self.assertEqual(_scalar(release_branch["type"]), "string")
+
+    def test_the_train_job_guards_workflow_run(self) -> None:
+        self.assertEqual(_expression(_scalar(self.wf.job("train")["if"])),
+                         "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || "
+                         "github.event_name == 'push' || "
+                         f"(github.event_name == 'workflow_run' && {PUBLISH_GUARD})")
+
+    def test_the_notice_job_runs_exactly_when_the_guard_fails(self) -> None:
+        self.assertEqual(_expression(_scalar(self.wf.job("skipped")["if"])),
+                         f"github.event_name == 'workflow_run' && !({PUBLISH_GUARD})")
+
+    def test_the_notice_job_has_no_permissions_credentials_or_secrets(self) -> None:
+        job = self.wf.job("skipped")
+        self.assertEqual(_scalar(job["permissions"]), "{}")
+        body: str = "\n".join(line for value in job.values() for line in value)
+        for forbidden in ("id-token", "secrets.", "aws-actions/", "uses:", "ACTIONS_ID_TOKEN", "vars."):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, body)
+        self.assertNotIn("needs", job)
+
+    def notice(self, env: dict[str, str]) -> tuple[int, str, str]:
+        step = self.wf.step("skipped", "Say why the release train skipped")
+        script: str = _scalar(step["run"])
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = Path(tmp) / "summary.md"
+            summary.write_text("")
+            proc = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", script], capture_output=True, text=True,
+                                  env={"PATH": os.environ["PATH"], "GITHUB_STEP_SUMMARY": str(summary),
+                                       "RT_TRIGGER_RUN_URL": PUBLISH_RUN, "RT_RELEASE_BRANCH": "mainline",
+                                       "RT_REPOSITORY": REPO, **env}, check=False)
+            return proc.returncode, proc.stdout, summary.read_text()
+
+    def test_the_notice_names_a_failed_publish(self) -> None:
+        code, out, summary = self.notice({"RT_TRIGGER_CONCLUSION": "failure", "RT_TRIGGER_HEAD_BRANCH": "mainline",
+                                          "RT_TRIGGER_HEAD_REPOSITORY": REPO})
+        self.assertEqual(code, 0)
+        (notice,) = out.splitlines()
+        self.assertEqual(notice, f"::notice::The release train skipped Release: Publish run {PUBLISH_RUN}: it "
+                                 "concluded failure. No release was recorded and nothing was dispatched.")
+        self.assertIn(f"Release: Publish run {PUBLISH_RUN}: it concluded failure.", summary)
+
+    def test_the_notice_names_a_foreign_head_and_branch(self) -> None:
+        code, out, summary = self.notice({"RT_TRIGGER_CONCLUSION": "success", "RT_TRIGGER_HEAD_BRANCH": "patch-1",
+                                          "RT_TRIGGER_HEAD_REPOSITORY": "someone/fork"})
+        self.assertEqual(code, 0)
+        self.assertIn(f"it ran on a commit of someone/fork, not {REPO}; it ran on branch patch-1, not the release "
+                      "branch mainline.", out)
+        self.assertNotIn("concluded", out)
+        self.assertIn("someone/fork", summary)
+
+    def test_the_notice_cannot_inject_a_workflow_command(self) -> None:
+        branch = "x%0A::error::injected"
+        _, out, _ = self.notice({"RT_TRIGGER_CONCLUSION": "success", "RT_TRIGGER_HEAD_BRANCH": branch,
+                                 "RT_TRIGGER_HEAD_REPOSITORY": REPO})
+        (notice,) = out.splitlines()
+        self.assertTrue(notice.startswith("::notice::"))
+        self.assertIn("x%250A::error::injected", notice)
+
+    def test_the_summary_holds_no_backticks_from_a_branch_name(self) -> None:
+        _, _, summary = self.notice({"RT_TRIGGER_CONCLUSION": "success", "RT_TRIGGER_HEAD_BRANCH": "a`[x](y)`b",
+                                     "RT_TRIGGER_HEAD_REPOSITORY": REPO})
+        self.assertIn("it ran on branch a'[x](y)'b, not the release branch mainline.", summary)
+        self.assertNotIn("`", summary)
+

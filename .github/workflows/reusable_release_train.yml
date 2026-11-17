@@ -17,8 +17,10 @@
 #   - the AWS role trusts only the subject repo:<owner>/<repo>:ref:refs/heads/<default branch>, which a
 #     pull_request run (from a fork or not) never has;
 #   - a workflow_run run is only a signal: it runs this workflow from the default branch and reads nothing of
-#     the run that triggered it (no artifact, no head ref) but its conclusion and URL. Unless that run (Release:
-#     Publish) succeeded, the script asks the gateway nothing, so no release is recorded and nothing is dispatched;
+#     the run that triggered it (no artifact, nothing checked out) but its conclusion, head repository, head
+#     branch and URL. The train job runs only if that run (Release: Publish) succeeded for this repository's own
+#     commit on release_branch; any other gets the skipped job's notice, which has no permissions. The script
+#     checks the conclusion again before it asks the gateway anything;
 #   - the gateway verifies a second OIDC ID token and checks the repository, ref, event and this workflow
 #     (job_workflow_ref) itself, so one repository cannot act for another.
 #
@@ -77,6 +79,11 @@ on:
         required: false
         type: string
         default: "mainline"
+      release_branch:
+        description: "The branch Release: Publish runs from. A workflow_run run whose Publish ran on another branch (or for another repository's commit, or did not succeed) is skipped with a notice."
+        required: false
+        type: string
+        default: "mainline"
       dispatch_repos:
         description: "The owner/repo names (comma or space separated) whose release_train.yml this repository may dispatch after a release. A target must also be on the gateway's allowlist. Empty: no dispatches."
         required: false
@@ -109,7 +116,15 @@ permissions: {}
 jobs:
   train:
     name: Release train
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'workflow_run' }}
+    # A workflow_run run goes on only for a successful Release: Publish of this repository's own release branch;
+    # any other (a failed or cancelled Publish, or a same-named workflow run from a fork or another branch) gets
+    # the skipped job's notice instead, before any OIDC token or AWS credential exists.
+    if: >-
+      ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == inputs.release_branch) }}
     runs-on: ubuntu-latest
     # The wait (at most 65 minutes) plus checkout, setup and the dispatch step.
     timeout-minutes: 80
@@ -171,3 +186,50 @@ jobs:
           RT_TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           RT_TRIGGER_RUN_URL: ${{ github.event.workflow_run.html_url }}
         run: python3 workflow-tooling/.github/scripts/release_train.py dispatch
+
+  # The other side of the train job's guard: a workflow_run run that does not qualify. No permissions, no OIDC
+  # token, no AWS credential and no checkout; it only says in the log and summary why the train did not run. The
+  # head branch and repository come from the triggering run (a fork can choose them), so they reach the script
+  # through env and are escaped for the workflow command.
+  skipped:
+    name: Release train skipped
+    if: >-
+      ${{ github.event_name == 'workflow_run' && !(github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == inputs.release_branch) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Say why the release train skipped
+        env:
+          RT_TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RT_TRIGGER_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RT_TRIGGER_HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+          RT_TRIGGER_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RT_RELEASE_BRANCH: ${{ inputs.release_branch }}
+          RT_REPOSITORY: ${{ github.repository }}
+        run: |
+          # The same three checks as the train job's guard (GitHub compares strings case-insensitively).
+          reasons=()
+          if [ "${RT_TRIGGER_CONCLUSION,,}" != success ]; then
+            reasons+=("it concluded ${RT_TRIGGER_CONCLUSION:-without a conclusion}")
+          fi
+          if [ "${RT_TRIGGER_HEAD_REPOSITORY,,}" != "${RT_REPOSITORY,,}" ]; then
+            reasons+=("it ran on a commit of ${RT_TRIGGER_HEAD_REPOSITORY:-an unknown repository}, not $RT_REPOSITORY")
+          fi
+          if [ "${RT_TRIGGER_HEAD_BRANCH,,}" != "${RT_RELEASE_BRANCH,,}" ]; then
+            reasons+=("it ran on branch ${RT_TRIGGER_HEAD_BRANCH:-(none)}, not the release branch $RT_RELEASE_BRANCH")
+          fi
+          why=""
+          for reason in "${reasons[@]}"; do
+            why+="${why:+; }$reason"
+          done
+          msg="The release train skipped Release: Publish run ${RT_TRIGGER_RUN_URL:-(unknown run)}: ${why}. No release was recorded and nothing was dispatched."
+          escaped=${msg//%/%25}
+          escaped=${escaped//$'\r'/%0D}
+          escaped=${escaped//$'\n'/%0A}
+          printf '::notice::%s\n' "$escaped"
+          # No backticks in the summary's Markdown: a branch name may hold them.
+          summary=${msg//\`/\'}
+          printf '%s\n' "$summary" >> "$GITHUB_STEP_SUMMARY"
