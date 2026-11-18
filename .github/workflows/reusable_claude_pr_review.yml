@@ -133,10 +133,10 @@ jobs:
       # come from the server-populated workflow_run event and cannot be forged.
       #
       # We look up the PRs associated with head_sha, keep only open PRs whose
-      # head repo matches the trusted head_repository, and require exactly one
-      # match. The PR number and base SHA are taken from that PR -- so the
-      # comment target is guaranteed to be the PR that actually contains the
-      # reviewed commit.
+      # current head SHA and head repo match the trusted inputs, and require
+      # exactly one match. The PR number and base SHA are taken from that PR --
+      # so the comment target is guaranteed to be the PR whose current head is
+      # the reviewed commit.
       #
       # When the commit does not resolve to exactly one open PR, there is simply
       # nothing to review, and we SKIP CLEANLY (set resolved=false, exit 0) so
@@ -191,10 +191,13 @@ jobs:
           # the base repo back to $REPO so the resolved PR is guaranteed to
           # target this repository (the comment target cannot be redirected to a
           # PR in some other base), and keep only open PRs from the trusted head
-          # repo. Both $EXPECTED_HEAD_REPO and $HEAD_SHA come from the
+          # repo whose current head is $HEAD_SHA. The API also returns stacked
+          # PRs containing this commit as an ancestor; exclude those before
+          # counting matches so they do not make the target PR ambiguous.
+          # Both $EXPECTED_HEAD_REPO and $HEAD_SHA come from the
           # server-populated workflow_run payload and cannot be forged.
           matches=$(gh api "repos/$EXPECTED_HEAD_REPO/commits/$HEAD_SHA/pulls" \
-            --jq "[.[] | select(.state == \"open\" and .head.repo.full_name == \"$EXPECTED_HEAD_REPO\" and .base.repo.full_name == \"$REPO\")]")
+            --jq "[.[] | select(.state == \"open\" and .head.sha == \"$HEAD_SHA\" and .head.repo.full_name == \"$EXPECTED_HEAD_REPO\" and .base.repo.full_name == \"$REPO\")]")
 
           count=$(echo "$matches" | jq 'length')
           if [[ "$count" -ne 1 ]]; then
@@ -203,12 +206,6 @@ jobs:
             # resolved=true. This is an absence of work, not a forged input, so
             # it is not a failure. (See the step comment above.)
             echo "::notice::No unique open PR for $HEAD_SHA from $EXPECTED_HEAD_REPO (found $count); nothing to review, skipping."
-            echo "resolved=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [[ "$(echo "$matches" | jq -r '.[0].head.sha')" != "$HEAD_SHA" ]]; then
-            echo "::notice::$HEAD_SHA is no longer the PR head; a newer push supersedes it, skipping."
             echo "resolved=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
