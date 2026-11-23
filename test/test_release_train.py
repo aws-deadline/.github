@@ -756,7 +756,7 @@ class TestDispatchStep(TestCase):
                                  [f"/repos/{dispatched}/actions/workflows/release_train.yml/dispatches"])
 
     def test_an_unknown_owner_is_refused_without_calling_github(self) -> None:
-        for repo in ("example-owner/cli", "seant-aws/openjd-cli", "OpenJobDescription-x/openjd-cli"):
+        for repo in ("example-owner/cli", "example-org/openjd-cli", "OpenJobDescription-x/openjd-cli"):
             with self.subTest(repo=repo):
                 target = {**TARGET, "repo": repo, "key": f"DISPATCH#release#{repo}#openjd-sessions#0.15.2"}
                 (result,) = self.dispatch(targets=[target], repos=repo, allowed=[repo])
