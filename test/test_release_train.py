@@ -477,14 +477,12 @@ class TestWaiting(TestCase):
         self.ctx = rt.Context(repo=REPO, default_branch="trunk", token="", mode="live", workdir=self.tmp,
                               api=self.api, download=lambda url, limit: b"")
         self.clock = Clock()
-        self.dispatch_file = self.tmp / "dispatch.json"
 
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
     def converse(self, gateway: FakeGateway, wait_s: float = 600.0) -> rt.Conversation:
-        return rt.converse(self.ctx, gateway, wait_s=wait_s, poll_s=20.0, now=self.clock.time, sleep=self.clock.sleep,
-                           dispatch_file=self.dispatch_file)
+        return rt.converse(self.ctx, gateway, wait_s=wait_s, poll_s=20.0, now=self.clock.time, sleep=self.clock.sleep)
 
     def comment(self, n: int = 0) -> dict[str, Any]:
         return {"kind": "comment", "id": f"t|sessions|pr|0123456789abcdef|{n}", "number": 7, "body": "b"}
@@ -553,20 +551,28 @@ class TestWaiting(TestCase):
                 raise rt.GatewayError("throttled")
             return gateway(payload)
 
-        out = rt.converse(self.ctx, flaky, wait_s=600.0, poll_s=20.0, now=self.clock.time, sleep=self.clock.sleep,
-                          dispatch_file=self.dispatch_file)
+        out = rt.converse(self.ctx, flaky, wait_s=600.0, poll_s=20.0, now=self.clock.time, sleep=self.clock.sleep)
         self.assertEqual(calls, 1 + rt.MAX_GATEWAY_FAILURES)
         self.assertIn("throttled", out.ended)
         self.assertTrue(out.failed)
 
-    def test_fanout_targets_are_collected_for_the_dispatch_step(self) -> None:
+    def test_fanout_targets_are_collected_for_the_dispatch_job(self) -> None:
         target = {"key": "DISPATCH#release#example-owner/cli#openjd-sessions#0.15.2", "repo": "example-owner/cli",
                   "workflow": "release_train.yml", "ref": "trunk", "reason": "openjd-sessions 0.15.2 released"}
         gateway = FakeGateway([plan_of(busy=True), plan_of(dispatch={"allowed": ["example-owner/cli"],
                                                                      "targets": [target]}), plan_of()])
-        self.converse(gateway)
-        doc = rt.json.loads(self.dispatch_file.read_text())
-        self.assertEqual(doc, {"allowed": ["example-owner/cli"], "targets": [target]})
+        conv = self.converse(gateway)
+        self.assertEqual((conv.allowed, conv.targets), (["example-owner/cli"], [target]))
+        # The job output carries only what the dispatch job reads: no reason, nothing else the gateway sent.
+        self.assertEqual(rt.dispatch_output(conv), {"allowed": ["example-owner/cli"], "targets": [
+            {"key": target["key"], "repo": "example-owner/cli", "workflow": "release_train.yml", "ref": "trunk"}]})
+
+    def test_the_job_output_keeps_the_first_targets_only(self) -> None:
+        # The dispatch step always took the first MAX_DISPATCH_TARGETS; the dispatch job now refuses more.
+        targets = [{"key": f"DISPATCH#release#{CLI}#openjd-sessions#0.15.{n}", "repo": CLI,
+                    "workflow": "release_train.yml", "ref": "trunk"} for n in range(rt.MAX_DISPATCH_TARGETS + 5)]
+        conv = rt.Conversation(plan={}, allowed=[CLI], targets=targets)
+        self.assertEqual(rt.dispatch_output(conv)["targets"], targets[:rt.MAX_DISPATCH_TARGETS])
 
     def test_every_planning_request_carries_the_schedule_and_the_weekly_variable(self) -> None:
         self.ctx.schedule = "17 15 * * 1"
@@ -807,31 +813,329 @@ class TestDispatchStep(TestCase):
         self.assertEqual(rt.parse_repos(""), frozenset())
 
 
+def read_outputs(path: Path) -> dict[str, str]:
+    """A step's GITHUB_OUTPUT file, written as one name=value line per output."""
+    if not path.exists():
+        return {}
+    return dict(line.split("=", 1) for line in path.read_text().splitlines() if line)
+
+
+def target_of(repo: str = CLI, package: str = "openjd-sessions", version: str = "0.15.2", **fields: Any) -> dict[str, Any]:
+    """A fan-out target as the train job's output carries it (only DISPATCH_TARGET_KEYS)."""
+    return {"key": f"DISPATCH#release#{repo}#{package}#{version}", "repo": repo, "workflow": "release_train.yml",
+            "ref": "trunk", **fields}
+
+
+def doc_text(targets: list[dict[str, Any]] | None = None, allowed: list[str] | None = None, **extra: Any) -> str:
+    return json.dumps({"allowed": [CLI, WA] if allowed is None else allowed,
+                       "targets": [target_of()] if targets is None else targets, **extra})
+
+
+class TestDispatchInput(TestCase):
+    """The dispatch job's input from the train job: a job output, so as untrusted as anything an earlier step of
+    that job could write. It is parsed strictly before any token is used; anything off fails the job."""
+
+    def refused(self, text: str, match: str) -> None:
+        with self.assertRaisesRegex(rt.DispatchInputError, match):
+            rt.parse_dispatch_doc(text)
+
+    def test_a_well_formed_document_is_returned_as_is(self) -> None:
+        doc = rt.parse_dispatch_doc(doc_text([target_of(), target_of(WA, version="0.15.3")]))
+        self.assertEqual(doc, {"allowed": [CLI, WA], "targets": [target_of(), target_of(WA, version="0.15.3")]})
+
+    def test_a_train_suffix_on_the_claim_is_accepted(self) -> None:
+        target = target_of()
+        target["key"] += "#rt-gha-sessions-release-only-1"
+        self.assertEqual(rt.parse_dispatch_doc(doc_text([target]))["targets"], [target])
+
+    def test_text_that_is_not_json_is_refused(self) -> None:
+        for text in ("", "{", '[{"key": 1}', doc_text() + "\n::error::injected", "None", "{'allowed': []}"):
+            with self.subTest(text=text):
+                self.refused(text, "is not JSON")
+
+    def test_a_document_of_another_shape_is_refused(self) -> None:
+        for text in ("[]", '"x"', "1", json.dumps({"targets": []}), doc_text(extra="x"),
+                     json.dumps({"allowed": CLI, "targets": []}), json.dumps({"allowed": [], "targets": {}})):
+            with self.subTest(text=text):
+                self.refused(text, "must be an object with exactly")
+
+    def test_a_target_with_other_keys_or_types_is_refused(self) -> None:
+        full = target_of()
+        for target in ({**full, "inputs": {"x": "y"}}, {k: v for k, v in full.items() if k != "ref"},
+                       {**full, "ref": 1}, {**full, "repo": None}, "OpenJobDescription/openjd-cli", [full]):
+            with self.subTest(target=target):
+                self.refused(doc_text([target]), "target 0 must be an object with exactly the string keys")
+
+    def test_an_owner_other_than_the_two_organizations_is_refused(self) -> None:
+        for repo in ("example-owner/cli", "OpenJobDescription-x/openjd-cli", "aws/deadline-cloud", "x/aws-deadline"):
+            with self.subTest(repo=repo):
+                self.refused(doc_text([target_of(repo)]), "OpenJobDescription/<name> or aws-deadline/<name>")
+
+    def test_a_malformed_repository_name_is_refused(self) -> None:
+        for repo in ("OpenJobDescription/openjd-cli\n", "OpenJobDescription/../x", "OpenJobDescription/a b",
+                     "OpenJobDescription/", "OpenJobDescription/x/y", "OpenJobDescription/x%0A", "aws-deadline/x$y",
+                     "OpenJobDescription/.", "aws-deadline/.."):
+            with self.subTest(repo=repo):
+                self.refused(doc_text([target_of(repo)]), "OpenJobDescription/<name> or aws-deadline/<name>")
+
+    def test_a_claim_naming_another_repository_is_refused(self) -> None:
+        self.refused(doc_text([{**target_of(), "repo": WA}]), "does not name its repository")
+
+    def test_a_bad_package_name_is_refused(self) -> None:
+        for package in ("OpenJD-Sessions", "openjd_sessions", "-openjd", "openjd.sessions", "openjd sessions", ""):
+            with self.subTest(package=package):
+                self.refused(doc_text([target_of(package=package)]), "package name")
+
+    def test_a_version_that_is_not_strict_semver_is_refused(self) -> None:
+        for version in ("0.15", "0.15.2rc1", "v0.15.2", "0.15.2.1", "0.15.x", "", "0.15.2 ", "１.0.0"):
+            with self.subTest(version=version):
+                self.refused(doc_text([target_of(version=version)]), "version")
+
+    def test_a_bad_train_suffix_is_refused(self) -> None:
+        for suffix in ("#", "#a b", "#a#b", "#" + "a" * 81, "#a_b"):
+            with self.subTest(suffix=suffix):
+                target = target_of()
+                target["key"] += suffix
+                self.refused(doc_text([target]), "claim")
+
+    def test_another_workflow_or_a_malformed_ref_is_refused(self) -> None:
+        for bad, match in (({"workflow": "release_bump.yml"}, "release_train.yml"),
+                           ({"workflow": "../release_train.yml"}, "release_train.yml"),
+                           ({"ref": "x y"}, "branch"), ({"ref": "-x"}, "branch"), ({"ref": "a..b"}, "branch"),
+                           ({"ref": ""}, "branch")):
+            with self.subTest(bad=bad):
+                self.refused(doc_text([target_of(**bad)]), match)
+
+    def test_more_targets_than_the_limit_are_refused(self) -> None:
+        targets = [target_of(version=f"0.15.{n}") for n in range(rt.MAX_DISPATCH_TARGETS + 1)]
+        self.refused(doc_text(targets), f"at most {rt.MAX_DISPATCH_TARGETS} targets")
+        self.assertEqual(len(rt.parse_dispatch_doc(doc_text(targets[:-1]))["targets"]), rt.MAX_DISPATCH_TARGETS)
+
+    def test_a_claim_named_twice_is_refused(self) -> None:
+        self.refused(doc_text([target_of(), target_of()]), "twice")
+
+    def test_a_malformed_allowlist_is_refused(self) -> None:
+        for allowed in ([1], ["a b/c"], ["x"], [CLI] * (rt.MAX_ALLOWED_REPOS + 1)):
+            with self.subTest(allowed=allowed if len(allowed) < 5 else len(allowed)):
+                self.refused(doc_text(allowed=allowed), "allowed")
+
+
+class TestDispatchJob(TestCase):
+    """`release_train.py dispatch` as the dispatch job runs it: the train job's output in RT_DISPATCH_DOC, the
+    caller's dispatch_repos, one token per organization; results to GITHUB_OUTPUT for the report job."""
+
+    def run_job(self, doc: str, repos: str = f"{CLI} {WA}", status: int = 204, tokens: dict[str, str] | None = None,
+                flag: str = "") -> tuple[int, str, dict[str, str], list[tuple[str, str, str]]]:
+        calls: list[tuple[str, str, str]] = []
+
+        def github_api(token: str, base: str = "") -> Any:
+            api = DispatchApi(status=status)
+
+            def call(method: str, path: str, body: Any = None) -> Any:
+                calls.append((token, method, path))
+                return api(method, path, body)
+            return call
+
+        env_tokens = {"RT_DISPATCH_TOKEN_OPENJOBDESCRIPTION": OPENJD_TOKEN,
+                      "RT_DISPATCH_TOKEN_AWS_DEADLINE": AWS_DEADLINE_TOKEN} if tokens is None else tokens
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "output"
+            out = io.StringIO()
+            with mock.patch.dict(os.environ, {"RT_DISPATCH_DOC": doc, "RT_DISPATCH_FLAG": flag, "RT_DISPATCH_REPOS": repos,
+                                              "GITHUB_OUTPUT": str(output), "RUNNER_TEMP": tmp, **env_tokens}), \
+                    mock.patch.object(rt, "github_api", github_api), \
+                    mock.patch.object(rt, "invoke", lambda *a: self.fail("the dispatch job invoked the gateway")), \
+                    mock.patch.object(rt, "id_token", lambda *a: self.fail("the dispatch job minted an ID token")), \
+                    contextlib.redirect_stdout(out):
+                code = rt.run_dispatch()
+            return code, out.getvalue(), read_outputs(output), calls
+
+    def test_exactly_the_listed_repos_are_dispatched_each_with_its_own_orgs_token(self) -> None:
+        code, log, outputs, calls = self.run_job(doc_text([target_of(), target_of(WA)]))
+        self.assertEqual(code, 0)
+        self.assertEqual([c for c in calls if c[1] == "POST"], [
+            (OPENJD_TOKEN, "POST", f"/repos/{CLI}/actions/workflows/release_train.yml/dispatches"),
+            (AWS_DEADLINE_TOKEN, "POST", f"/repos/{WA}/actions/workflows/release_train.yml/dispatches")])
+        results = json.loads(outputs["results"])
+        self.assertEqual([(r["key"], r["ok"], r["status"], r["outcome"]) for r in results],
+                         [(target_of()["key"], True, 204, "dispatched"), (target_of(WA)["key"], True, 204, "dispatched")])
+        self.assertEqual({tuple(sorted(r)) for r in results}, {tuple(sorted(rt.DISPATCH_RESULT_KEYS))})
+
+    def test_a_malformed_document_fails_the_job_before_any_token_is_used(self) -> None:
+        for doc, match in ((doc_text() + "\n::error::x", "is not JSON"),
+                           (doc_text([target_of("example-owner/cli")]), "OpenJobDescription/<name> or aws-deadline"),
+                           (doc_text([target_of(version="0.15.2-rc1")]), "version"),
+                           (doc_text([target_of(package="Openjd")]), "package name"),
+                           (doc_text([target_of(version=f"0.15.{n}") for n in range(rt.MAX_DISPATCH_TARGETS + 1)]),
+                            "at most")):
+            with self.subTest(match=match):
+                code, log, outputs, calls = self.run_job(doc)
+                self.assertEqual(code, 1)
+                (error,) = [line for line in log.splitlines() if line.startswith("::error::")]
+                self.assertIn("nothing was dispatched", error)
+                self.assertRegex(error, match)
+                self.assertEqual(calls, [])
+                self.assertNotIn("results", outputs)
+
+    def test_a_target_missing_from_the_callers_list_is_refused_and_the_rest_dispatched(self) -> None:
+        code, log, outputs, calls = self.run_job(doc_text([target_of(), target_of(WA)]), repos=CLI)
+        self.assertEqual(code, 0)
+        self.assertEqual([c[2] for c in calls if c[1] == "POST"],
+                         [f"/repos/{CLI}/actions/workflows/release_train.yml/dispatches"])
+        self.assertEqual([r["outcome"] for r in json.loads(outputs["results"])], ["dispatched", "refused"])
+        self.assertIn(f"::warning::dispatch of {WA}: refused", log)
+
+    def test_a_document_with_no_targets_dispatches_nothing(self) -> None:
+        for doc in ("", doc_text([])):
+            with self.subTest(doc=doc):
+                code, log, outputs, calls = self.run_job(doc)
+                self.assertEqual((code, calls), (0, []))
+                self.assertIn("No downstream dispatches.", log)
+                self.assertNotIn("results", outputs)
+
+    def test_an_empty_document_when_the_train_job_says_dispatch_fails_the_job(self) -> None:
+        # The runner drops a job output holding a masked value, so dispatch can be 'true' with no document.
+        for doc in ("", " \n"):
+            with self.subTest(doc=doc):
+                code, log, outputs, calls = self.run_job(doc, flag="true")
+                self.assertEqual((code, calls), (1, []))
+                (error,) = [line for line in log.splitlines() if line.startswith("::error::")]
+                self.assertIn("masked", error)
+                self.assertIn("nothing was dispatched", error)
+                self.assertNotIn("No downstream dispatches", log)
+                self.assertNotIn("results", outputs)
+
+    def test_the_results_output_never_holds_a_token(self) -> None:
+        for status in (204, 401, 500):
+            with self.subTest(status=status):
+                _, log, outputs, _ = self.run_job(doc_text([target_of(), target_of(WA)]), status=status)
+                for text in (log, outputs["results"]):
+                    self.assertNotIn(OPENJD_TOKEN, text)
+                    self.assertNotIn(AWS_DEADLINE_TOKEN, text)
+
+
+RESULT = {"key": target_of()["key"], "ok": True, "status": 204, "outcome": "dispatched", "error": ""}
+
+
+class TestDispatchReport(TestCase):
+    """`release_train.py report-dispatch`: the dispatch job's results (a job output) go to the gateway from a job
+    with the OIDC role and no dispatch token. They are parsed as strictly as the dispatch job's input."""
+
+    def report(self, results: str) -> tuple[int, str, list[dict[str, Any]]]:
+        sent: list[dict[str, Any]] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            out = io.StringIO()
+            with mock.patch.dict(os.environ, {"RT_DISPATCH_RESULTS": results, "RT_GATEWAY_FUNCTION": "fn",
+                                              "RT_GATEWAY_AUDIENCE": "aud", "RUNNER_TEMP": tmp}), \
+                    mock.patch.object(rt, "id_token", lambda audience: "id-t0ken"), \
+                    mock.patch.object(rt, "invoke", lambda fn, payload, workdir: sent.append(payload) or {}), \
+                    contextlib.redirect_stdout(out):
+                code = rt.run_dispatch_report()
+            return code, out.getvalue(), sent
+
+    def test_the_results_are_recorded_with_the_gateway(self) -> None:
+        failed = {**RESULT, "key": target_of(WA)["key"], "ok": False, "status": 401, "outcome": "failed",
+                  "error": "HTTP 401"}
+        code, _, sent = self.report(json.dumps([RESULT, failed]))
+        self.assertEqual(code, 0)
+        self.assertEqual(sent, [{"phase": "dispatched", "id_token": "id-t0ken", "results": [RESULT, failed]}])
+
+    def test_no_results_record_nothing(self) -> None:
+        code, log, sent = self.report("")
+        self.assertEqual((code, sent), (0, []))
+        self.assertIn("No downstream dispatches", log)
+
+    def test_malformed_results_fail_the_job_without_calling_the_gateway(self) -> None:
+        for results, match in (("[", "not JSON"), (json.dumps(RESULT), "a list"),
+                               (json.dumps([{**RESULT, "token": "x"}]), "exactly the keys"),
+                               (json.dumps([{**RESULT, "ok": "true"}]), "ok"),
+                               (json.dumps([{**RESULT, "status": True}]), "status"),
+                               (json.dumps([{**RESULT, "status": 999}]), "status"),
+                               (json.dumps([{**RESULT, "outcome": "merged"}]), "outcome"),
+                               (json.dumps([{**RESULT, "key": "DISPATCH#handoff#x"}]), "key"),
+                               (json.dumps([{**RESULT, "error": "x" * 1001}]), "error"),
+                               (json.dumps([RESULT] * (rt.MAX_DISPATCH_TARGETS + 1)), "at most")):
+            with self.subTest(match=match):
+                code, log, sent = self.report(results)
+                self.assertEqual((code, sent), (1, []))
+                (error,) = [line for line in log.splitlines() if line.startswith("::error::")]
+                self.assertRegex(error, match)
+
+
+class TestTrainJobOutputs(TestCase):
+    """The train job hands the dispatch job its targets as job outputs (it has no dispatch token to use them)."""
+
+    def run_train(self, targets: list[dict[str, Any]]) -> tuple[int, dict[str, str]]:
+        def converse(ctx: Any, call: Any, **kwargs: Any) -> Any:
+            return rt.Conversation(plan={"actions": []}, ended="nothing to wait for", allowed=[CLI], targets=targets)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "output"
+            with mock.patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO, "GITHUB_TOKEN": "t",
+                                              "GITHUB_REF": "refs/heads/trunk", "GITHUB_EVENT_NAME": "push",
+                                              "RT_GATEWAY_FUNCTION": "fn", "RT_GATEWAY_AUDIENCE": "aud",
+                                              "GITHUB_OUTPUT": str(output), "RUNNER_TEMP": tmp, "RT_MODE": "live"}), \
+                    mock.patch.object(rt, "github_api", lambda t, base="": lambda *a: {"default_branch": "trunk"}), \
+                    mock.patch.object(rt, "converse", converse), contextlib.redirect_stdout(io.StringIO()):
+                code = rt.run()
+            return code, read_outputs(output)
+
+    def test_a_run_with_fanout_outputs_the_targets(self) -> None:
+        code, outputs = self.run_train([{**target_of(), "reason": "openjd-sessions 0.15.2 released"}])
+        self.assertEqual(code, 0)
+        self.assertEqual(outputs["dispatch"], "true")
+        self.assertEqual(json.loads(outputs["dispatch_doc"]), {"allowed": [CLI], "targets": [target_of()]})
+        # The dispatch job parses exactly what the train job writes.
+        self.assertEqual(rt.parse_dispatch_doc(outputs["dispatch_doc"])["targets"], [target_of()])
+
+    def test_a_run_without_fanout_says_so(self) -> None:
+        code, outputs = self.run_train([])
+        self.assertEqual((code, outputs["dispatch"]), (0, "false"))
+
+    def test_an_output_value_is_one_line(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(Path(tmp) / "o")}):
+            with self.assertRaisesRegex(ValueError, "one line"):
+                rt.write_output("dispatch_doc", "a\nresults=x")
+
+
 class TestRunDispatch(TestCase):
     """The dispatch step as the workflow runs it: tokens from the environment, output to the log and summary."""
 
     def run_step(self, env: dict[str, str], status: int = 204) -> tuple[str, str, list[dict[str, Any]], list[str]]:
+        """The dispatch job (tokens, no gateway), then the report job (gateway, no tokens), each in its own env."""
         api = DispatchApi(status=status)
         tokens_used: list[str] = []
         sent: list[dict[str, Any]] = []
+        invoked_in_dispatch: list[str] = []
 
         def github_api(token: str, base: str = "") -> DispatchApi:
             tokens_used.append(token)
             return api
 
         with tempfile.TemporaryDirectory() as tmp:
-            dispatch_file = Path(tmp) / "dispatch.json"
-            dispatch_file.write_text(json.dumps({"allowed": [CLI, WA], "targets": [TARGET, WA_TARGET]}))
             summary = Path(tmp) / "summary.md"
+            output = Path(tmp) / "output"
             out = io.StringIO()
-            with mock.patch.dict(os.environ, {"RT_DISPATCH_FILE": str(dispatch_file), "RT_DISPATCH_REPOS": f"{CLI} {WA}",
-                                              "RT_GATEWAY_FUNCTION": "fn", "RT_GATEWAY_AUDIENCE": "aud",
-                                              "GITHUB_STEP_SUMMARY": str(summary), "RUNNER_TEMP": tmp, **env}), \
+            doc = {"allowed": [CLI, WA], "targets": [{k: t[k] for k in rt.DISPATCH_TARGET_KEYS}
+                                                     for t in (TARGET, WA_TARGET)]}
+            with mock.patch.dict(os.environ, {"RT_DISPATCH_DOC": json.dumps(doc), "RT_DISPATCH_REPOS": f"{CLI} {WA}",
+                                              "GITHUB_STEP_SUMMARY": str(summary), "GITHUB_OUTPUT": str(output),
+                                              "RUNNER_TEMP": tmp, **env}), \
                     mock.patch.object(rt, "github_api", github_api), \
+                    mock.patch.object(rt, "invoke", lambda *a: invoked_in_dispatch.append("invoke") or {}), \
+                    contextlib.redirect_stdout(out):
+                self.assertEqual(rt.run_dispatch(), 0)
+            # The dispatch job never talks to the gateway: it has no OIDC token and no AWS credential.
+            self.assertEqual(invoked_in_dispatch, [])
+            results = read_outputs(output)["results"]
+            with mock.patch.dict(os.environ, {"RT_DISPATCH_RESULTS": results, "RT_GATEWAY_FUNCTION": "fn",
+                                              "RT_GATEWAY_AUDIENCE": "aud", "RUNNER_TEMP": tmp}, clear=True), \
+                    mock.patch.object(rt, "github_api", lambda *a, **k: self.fail("the report job called GitHub")), \
                     mock.patch.object(rt, "id_token", lambda audience: "id-t0ken"), \
                     mock.patch.object(rt, "invoke", lambda fn, payload, workdir: sent.append(payload) or {}), \
                     contextlib.redirect_stdout(out):
-                self.assertEqual(rt.run_dispatch(), 0)
+                self.assertEqual(rt.run_dispatch_report(), 0)
             return out.getvalue(), summary.read_text(), sent, tokens_used
 
     def test_the_step_reads_one_token_per_org(self) -> None:
@@ -1039,12 +1343,11 @@ class TestTriggeringRun(TestCase):
     def test_the_dispatch_step_dispatches_nothing_after_a_failed_publish(self) -> None:
         api_calls: list[str] = []
         with tempfile.TemporaryDirectory() as tmp:
-            dispatch_file = Path(tmp) / "dispatch.json"
-            dispatch_file.write_text(json.dumps({"allowed": [CLI], "targets": [TARGET]}))
+            doc = {"allowed": [CLI], "targets": [{k: TARGET[k] for k in rt.DISPATCH_TARGET_KEYS}]}
             out = io.StringIO()
-            with mock.patch.dict(os.environ, {"RT_DISPATCH_FILE": str(dispatch_file), "RT_DISPATCH_REPOS": CLI,
+            with mock.patch.dict(os.environ, {"RT_DISPATCH_DOC": json.dumps(doc), "RT_DISPATCH_REPOS": CLI,
                                               "RT_DISPATCH_TOKEN_OPENJOBDESCRIPTION": OPENJD_TOKEN,
-                                              "RT_GATEWAY_FUNCTION": "fn", "RT_GATEWAY_AUDIENCE": "aud",
+                                              "GITHUB_OUTPUT": str(Path(tmp) / "output"),
                                               "RUNNER_TEMP": tmp, **self.publish("failure")}), \
                     mock.patch.object(rt, "github_api", lambda t, base="": api_calls.append(t)), \
                     mock.patch.object(rt, "invoke", lambda *a: api_calls.append("invoke") or {}), \
@@ -1342,16 +1645,23 @@ class TestAccountIdMasking(TestCase):
     ARN = "arn:aws:lambda:us-east-2:111122223333:function:rt-train-gateway"
 
     def test_configure_aws_credentials_masks_the_account_id(self) -> None:
-        step = self.wf.step("train", "Configure AWS credentials (OIDC; may invoke the gateway only)")
-        self.assertEqual(_scalar(_children(step["with"])["mask-aws-account-id"]), "true")
+        for job in ("train", "dispatch-report"):
+            with self.subTest(job=job):
+                step = self.wf.step(job, "Configure AWS credentials (OIDC; may invoke the gateway only)")
+                self.assertEqual(_scalar(_children(step["with"])["mask-aws-account-id"]), "true")
 
     def test_no_step_names_the_gateway_before_the_account_id_is_masked(self) -> None:
-        names: list[str] = [_scalar(s["name"]) for s in self.wf.steps("train")]
-        configure: int = names.index("Configure AWS credentials (OIDC; may invoke the gateway only)")
-        users: list[int] = [i for i, s in enumerate(self.wf.steps("train"))
-                            if "RELEASE_TRAIN_GATEWAY" in "\n".join(line for v in s.values() for line in v)]
-        self.assertEqual(len(users), 2)
-        self.assertTrue(all(i > configure for i in users), (names, users))
+        # One step per job that talks to the gateway (the train's run, the dispatch report); the dispatch job,
+        # which has the tokens, has no AWS credential and never names the gateway.
+        for job, count in (("train", 1), ("dispatch-report", 1), ("dispatch", 0), ("skipped", 0)):
+            with self.subTest(job=job):
+                users: list[int] = [i for i, s in enumerate(self.wf.steps(job))
+                                    if "RELEASE_TRAIN_GATEWAY" in "\n".join(line for v in s.values() for line in v)]
+                self.assertEqual(len(users), count)
+                if count:
+                    names: list[str] = [_scalar(s["name"]) for s in self.wf.steps(job)]
+                    configure: int = names.index("Configure AWS credentials (OIDC; may invoke the gateway only)")
+                    self.assertTrue(all(i > configure for i in users), (names, users))
 
     def masks(self, function: str) -> list[str]:
         out = io.StringIO()
@@ -1366,10 +1676,10 @@ class TestAccountIdMasking(TestCase):
         self.assertEqual(self.masks("rt-train-gateway"), [])
 
     def test_both_steps_mask_the_gateway_first(self) -> None:
-        for command, entry in (("run", rt.run), ("dispatch", rt.run_dispatch)):
+        for command, entry in (("run", rt.run), ("report-dispatch", rt.run_dispatch_report)):
             with self.subTest(command=command), tempfile.TemporaryDirectory() as tmp, \
                     mock.patch.dict(os.environ, {"RT_GATEWAY_FUNCTION": self.ARN, "GITHUB_EVENT_NAME": "push",
-                                                 "RT_DISPATCH_FILE": str(Path(tmp) / "none.json"),
+                                                 "RT_DISPATCH_RESULTS": "",
                                                  "GITHUB_REF": "refs/heads/elsewhere", "GITHUB_REPOSITORY": REPO,
                                                  "GITHUB_TOKEN": "t", "RT_GATEWAY_AUDIENCE": "aud"}), \
                     mock.patch.object(rt, "github_api", lambda t, base="": lambda *a, **k: {"default_branch": "trunk"}):
@@ -1459,3 +1769,113 @@ class TestScriptSource(TestCase):
                 code, out = self.source_check(repository, sha)
                 self.assertEqual(code, 1)
                 self.assertIn("::error::", out)
+
+
+def _body(job: dict[str, list[str]]) -> str:
+    return "\n".join(f"{k}: {line}" for k, v in job.items() for line in v)
+
+
+class TestDispatchJobIsolation(TestCase):
+    """Step-level secret scoping is no isolation boundary: every step of a job shares its filesystem, so an earlier
+    step could replace the script the token-holding step runs. The dispatch tokens therefore live in a job of
+    their own, with no permissions, a fresh checkout of this workflow's own commit and nothing else."""
+
+    wf = Workflow(WORKFLOW_PATH.read_text())
+    TOKENS = ("secrets.dispatch_token_openjd", "secrets.dispatch_token_aws_deadline")
+
+    def test_the_jobs(self) -> None:
+        self.assertEqual(self.wf.jobs(), ["train", "dispatch", "dispatch-report", "skipped"])
+
+    def test_the_dispatch_tokens_reach_only_the_dispatch_job(self) -> None:
+        for token in self.TOKENS:
+            with self.subTest(token=token):
+                # Once in the whole file, and that once in the dispatch job's dispatch step.
+                self.assertEqual(self.wf.text.count(token), 1)
+                self.assertEqual([j for j in self.wf.jobs() if token in _body(self.wf.job(j))], ["dispatch"])
+                step = self.wf.step("dispatch", "Dispatch the downstream release trains")
+                self.assertIn(token, "\n".join(_children(step["env"]).get(
+                    {"secrets.dispatch_token_openjd": "RT_DISPATCH_TOKEN_OPENJOBDESCRIPTION",
+                     "secrets.dispatch_token_aws_deadline": "RT_DISPATCH_TOKEN_AWS_DEADLINE"}[token], [])))
+        for job in ("train", "dispatch-report", "skipped"):
+            with self.subTest(job=job):
+                self.assertNotIn("dispatch_token", _body(self.wf.job(job)))
+                self.assertNotIn("RT_DISPATCH_TOKEN", _body(self.wf.job(job)))
+
+    def test_the_dispatch_job_has_no_permissions_and_follows_the_train(self) -> None:
+        job = self.wf.job("dispatch")
+        self.assertEqual(_scalar(job["permissions"]), "{}")
+        self.assertEqual(_scalar(job["needs"]), "train")
+        self.assertEqual(_expression(_scalar(job["if"])), "!cancelled() && needs.train.outputs.dispatch == 'true'")
+        for forbidden in ("id-token", "aws-actions/", "vars.", "github.token", "RT_GATEWAY", "role_arn"):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, _body(job))
+
+    def test_the_dispatch_job_runs_only_this_workflows_own_commit_of_the_script(self) -> None:
+        steps = self.wf.steps("dispatch")
+        self.assertEqual([_scalar(s["name"]) for s in steps], [
+            "Check the release-train script's source", "Check out the release-train script",
+            "Dispatch the downstream release trains"])
+        # The same source check as the train job's: an empty job.workflow_* would check out the caller's repo.
+        self.assertEqual(steps[0], self.wf.step("train", "Check the release-train script's source"))
+        checkout = steps[1]
+        self.assertEqual(checkout, self.wf.step("train", "Check out the release-train script"))
+        with_ = _children(checkout["with"])
+        self.assertEqual(_scalar(with_["repository"]), "${{ job.workflow_repository }}")
+        self.assertEqual(_scalar(with_["ref"]), "${{ job.workflow_sha }}")
+        self.assertEqual(_scalar(with_["persist-credentials"]), "false")
+        self.assertEqual(_scalar(with_["sparse-checkout"]), ".github/scripts")
+        # The one action is the commit-pinned checkout; the dispatch itself is the script and nothing else.
+        uses = [_scalar(s["uses"]) for s in steps if "uses" in s]
+        self.assertEqual(uses, ["actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"])
+        self.assertEqual(_scalar(steps[2]["run"]), "python3 workflow-tooling/.github/scripts/release_train.py dispatch")
+
+    def test_the_dispatch_targets_come_from_the_callers_input_and_the_train_jobs_output_by_env(self) -> None:
+        env = _children(self.wf.step("dispatch", "Dispatch the downstream release trains")["env"])
+        self.assertEqual(_scalar(env["RT_DISPATCH_REPOS"]), "${{ inputs.dispatch_repos }}")
+        self.assertEqual(_scalar(env["RT_DISPATCH_DOC"]), "${{ needs.train.outputs.dispatch_doc }}")
+        self.assertEqual(_scalar(env["RT_DISPATCH_FLAG"]), "${{ needs.train.outputs.dispatch }}")
+
+    def test_no_run_script_interpolates_an_expression(self) -> None:
+        for job in self.wf.jobs():
+            for step in self.wf.steps(job):
+                if "run" in step:
+                    with self.subTest(job=job, step=_scalar(step["name"])):
+                        self.assertNotIn("${{", _scalar(step["run"]))
+
+    def test_the_train_job_outputs_only_what_the_dispatch_job_reads(self) -> None:
+        job = self.wf.job("train")
+        outputs = {k: _scalar(v) for k, v in _children(job["outputs"]).items()}
+        self.assertEqual(outputs, {"dispatch": "${{ steps.run.outputs.dispatch }}",
+                                   "dispatch_doc": "${{ steps.run.outputs.dispatch_doc }}"})
+        self.assertEqual(_scalar(self.wf.step("train", "Run the release train's actions")["id"]), "run")
+        self.assertNotIn("Dispatch the downstream release trains", [_scalar(s["name"]) for s in self.wf.steps("train")])
+
+    def test_the_train_job_keeps_its_permissions(self) -> None:
+        perms = {k: _scalar(v) for k, v in _children(self.wf.job("train")["permissions"]).items()}
+        self.assertEqual(perms, {"contents": "write", "pull-requests": "write", "actions": "write",
+                                 "id-token": "write"})
+
+    def test_the_report_job_has_the_gateway_role_and_no_token(self) -> None:
+        job = self.wf.job("dispatch-report")
+        perms = {k: _scalar(v) for k, v in _children(job["permissions"]).items()}
+        self.assertEqual(perms, {"id-token": "write"})
+        self.assertEqual(_scalar(job["needs"]), "dispatch")
+        self.assertEqual(_expression(_scalar(job["if"])), "!cancelled() && needs.dispatch.outputs.results != ''")
+        step = self.wf.step("dispatch-report", "Record the downstream dispatches")
+        env = _children(step["env"])
+        self.assertEqual(_scalar(env["RT_DISPATCH_RESULTS"]), "${{ needs.dispatch.outputs.results }}")
+        self.assertEqual(_scalar(step["run"]),
+                         "python3 workflow-tooling/.github/scripts/release_train.py report-dispatch")
+        outputs = {k: _scalar(v) for k, v in _children(self.wf.job("dispatch")["outputs"]).items()}
+        self.assertEqual(outputs, {"results": "${{ steps.dispatch.outputs.results }}"})
+
+    def test_the_callers_interface_is_unchanged(self) -> None:
+        self.assertEqual({k: (_scalar(v["required"]), _scalar(v["type"])) for k, v in self.wf.inputs().items()}, {
+            "mode": ("true", "string"), "aws_region": ("false", "string"), "gateway_function": ("false", "string"),
+            "gateway_audience": ("false", "string"), "release_branch": ("false", "string"),
+            "dispatch_repos": ("false", "string"), "wait_minutes": ("false", "number")})
+        call: dict[str, list[str]] = _children(_children(self.wf.top["on"])["workflow_call"])
+        secrets = {k: _scalar(_children(v)["required"]) for k, v in _children(call["secrets"]).items()}
+        self.assertEqual(secrets, {"role_arn": "true", "dispatch_token_openjd": "false",
+                                   "dispatch_token_aws_deadline": "false"})
+        self.assertEqual(set(call), {"inputs", "secrets"})

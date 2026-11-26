@@ -26,7 +26,7 @@
 #   - the gateway verifies a second OIDC ID token and checks the repository, ref, event and this workflow
 #     (job_workflow_ref) itself, so one repository cannot act for another.
 #
-# Nothing from a pull request is checked out or executed. The only checkout is this workflow's own repository at
+# Nothing from a pull request is checked out or executed. Each job's only checkout is this workflow's own repository at
 # this workflow's own commit (for the script), without persisted credentials. A bot branch arrives as a git bundle whose size
 # and sha256 the train recorded; it is fetched into a bare repository, inspected, and pushed only to bot/*.
 #
@@ -40,9 +40,16 @@
 # back to the gateway_function and aws_region inputs, so no account id is written in any workflow.
 #
 # Downstream repositories: after a release, the gateway names the repositories whose release train should run
-# next. A separate step dispatches their release_train.yml (the only step that sees the dispatch tokens; it runs
-# only the script's dispatch command) after checking each one against the gateway's allowlist and the caller's
-# own dispatch_repos. There is one optional token per GitHub organization, chosen by the target's owner:
+# next. The train job passes them on as job outputs, and a separate job, dispatch, runs their release_train.yml.
+# It is the only job that sees the dispatch tokens, and a job of its own because step-level secret scoping is no
+# isolation boundary: every step of a job shares its filesystem, so an earlier step there (an action, a tool it
+# installs) could replace the script before the token-holding step runs it. The dispatch job has no permissions,
+# no AWS credential and no other action than the commit-pinned checkout of this workflow's own commit; it runs
+# only the script's dispatch command, which parses the train job's output strictly (failing, with nothing
+# dispatched, on anything malformed) and checks each target against the gateway's allowlist and the caller's own
+# dispatch_repos (read from this workflow's inputs, never from the train job). A third job, dispatch-report, with
+# the OIDC role and no token, records the outcomes with the gateway. There is one optional token per GitHub
+# organization, chosen by the target's owner:
 # dispatch_token_openjd for OpenJobDescription/* and dispatch_token_aws_deadline for aws-deadline/*; a target
 # owned by anyone else is refused. Each should be a fine-grained token owned by a bot user with only
 # Actions: read and write on the target repositories. Without an organization's token its targets are skipped
@@ -91,10 +98,10 @@ on:
         description: "ARN of the OIDC role that may invoke the gateway function."
         required: true
       dispatch_token_openjd:
-        description: "Optional fine-grained token (resource owner OpenJobDescription, Actions: read and write only) that may run release_train.yml in the OpenJobDescription repositories of dispatch_repos. Only the dispatch step receives it."
+        description: "Optional fine-grained token (resource owner OpenJobDescription, Actions: read and write only) that may run release_train.yml in the OpenJobDescription repositories of dispatch_repos. Only the dispatch job receives it."
         required: false
       dispatch_token_aws_deadline:
-        description: "Optional fine-grained token (resource owner aws-deadline, Actions: read and write only) that may run release_train.yml in the aws-deadline repositories of dispatch_repos. Only the dispatch step receives it."
+        description: "Optional fine-grained token (resource owner aws-deadline, Actions: read and write only) that may run release_train.yml in the aws-deadline repositories of dispatch_repos. Only the dispatch job receives it."
         required: false
 
 # Callers grant, least privilege:
@@ -118,13 +125,18 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository &&
       github.event.workflow_run.head_branch == inputs.release_branch) }}
     runs-on: ubuntu-latest
-    # The wait (at most 65 minutes) plus checkout, setup and the dispatch step.
+    # The wait (at most 65 minutes) plus checkout and setup.
     timeout-minutes: 80
     permissions:
       contents: write # push bot/* branches
       pull-requests: write # open and update the train's PRs and their labels
       actions: write # dispatch the repo's own Release: Bump
       id-token: write # OIDC tokens for the AWS role and the gateway
+    # The fan-out for the dispatch job, written by the run step: whether there is any, and the targets (only the
+    # fields the dispatch job reads) with the gateway's allowlist. No token is in this job to use them.
+    outputs:
+      dispatch: ${{ steps.run.outputs.dispatch }}
+      dispatch_doc: ${{ steps.run.outputs.dispatch_doc }}
     steps:
       # The script comes from exactly the repository and commit of this workflow file (the job context's
       # workflow_repository and workflow_sha), so the AWS role's job_workflow_ref pin and the gateway's workflow
@@ -164,13 +176,13 @@ jobs:
           role-duration-seconds: 5400
 
       - name: Run the release train's actions
+        id: run
         env:
           GITHUB_TOKEN: ${{ github.token }}
           RT_GATEWAY_FUNCTION: ${{ vars.RELEASE_TRAIN_GATEWAY || inputs.gateway_function }}
           RT_GATEWAY_AUDIENCE: ${{ inputs.gateway_audience }}
           RT_MODE: ${{ inputs.mode }}
           RT_WAIT_MINUTES: ${{ inputs.wait_minutes }}
-          RT_DISPATCH_FILE: ${{ runner.temp }}/release-train-dispatch.json
           # Set on workflow_run only: the triggering run's conclusion and URL (see skipped_trigger).
           RT_TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           RT_TRIGGER_RUN_URL: ${{ github.event.workflow_run.html_url }}
@@ -181,22 +193,111 @@ jobs:
           RT_WEEKLY_ENABLED: ${{ vars.RELEASE_TRAIN_WEEKLY }}
         run: python3 workflow-tooling/.github/scripts/release_train.py run
 
-      # The only step that sees the dispatch tokens. It runs nothing but the script's dispatch command, which
-      # may only POST .../actions/workflows/release_train.yml/dispatches for repositories on both lists, each
-      # with the token of its own organization.
+  # The only job that sees the dispatch tokens. Isolation is per job, not per step: a step-level secret is
+  # readable by whatever an earlier step of the same job left on its filesystem (a replaced script, a wrapped
+  # python3). So this job starts from a fresh runner with no permissions (its GITHUB_TOKEN can do nothing), no
+  # OIDC token and no AWS credential; its only action is the commit-pinned checkout of this workflow's own
+  # commit, and it runs nothing but the script's dispatch command. That command may only POST
+  # .../actions/workflows/release_train.yml/dispatches for repositories on both lists, each with the token of its
+  # own organization. The train job's output is data, passed through env and parsed strictly; the repositories a
+  # dispatch may name come from the caller's committed dispatch_repos input.
+  dispatch:
+    name: Dispatch the downstream release trains
+    needs: train
+    # !cancelled() rather than success() is deliberate: a late failure in the train job (after it wrote the
+    # fan-out) still dispatches, as the old dispatch step did. The doc is validated strictly before any dispatch.
+    if: ${{ !cancelled() && needs.train.outputs.dispatch == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: {}
+    outputs:
+      results: ${{ steps.dispatch.outputs.results }}
+    steps:
+      # The same check and checkout as the train job's: an empty job.workflow_* would otherwise check out the
+      # caller's repository here.
+      - name: Check the release-train script's source
+        env:
+          RT_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          RT_WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          if ! [[ "$RT_WORKFLOW_REPOSITORY" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$ ]] ||
+             ! [[ "$RT_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The job context does not name this workflow's repository and commit; the release-train script has no trusted source."
+            exit 1
+          fi
+          echo "The release-train script comes from $RT_WORKFLOW_REPOSITORY at $RT_WORKFLOW_SHA, this workflow's own commit."
+
+      - name: Check out the release-train script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: workflow-tooling
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+          submodules: false
+
       - name: Dispatch the downstream release trains
-        if: ${{ !cancelled() }}
+        id: dispatch
         env:
           RT_DISPATCH_TOKEN_OPENJOBDESCRIPTION: ${{ secrets.dispatch_token_openjd }}
           RT_DISPATCH_TOKEN_AWS_DEADLINE: ${{ secrets.dispatch_token_aws_deadline }}
           RT_DISPATCH_REPOS: ${{ inputs.dispatch_repos }}
-          RT_DISPATCH_FILE: ${{ runner.temp }}/release-train-dispatch.json
-          RT_GATEWAY_FUNCTION: ${{ vars.RELEASE_TRAIN_GATEWAY || inputs.gateway_function }}
-          RT_GATEWAY_AUDIENCE: ${{ inputs.gateway_audience }}
+          RT_DISPATCH_DOC: ${{ needs.train.outputs.dispatch_doc }}
+          # The runner drops an output holding a masked value; with the flag, an empty doc fails instead of passing.
+          RT_DISPATCH_FLAG: ${{ needs.train.outputs.dispatch }}
           # Set on workflow_run only: the triggering run's conclusion and URL (see skipped_trigger).
           RT_TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           RT_TRIGGER_RUN_URL: ${{ github.event.workflow_run.html_url }}
         run: python3 workflow-tooling/.github/scripts/release_train.py dispatch
+
+  # Records the dispatch job's outcomes with the gateway, which needs the OIDC role the dispatch job must not have.
+  # No dispatch token reaches this job; the results are parsed as strictly as the dispatch job's input.
+  dispatch-report:
+    name: Record the downstream dispatches
+    needs: dispatch
+    if: ${{ !cancelled() && needs.dispatch.outputs.results != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      id-token: write # OIDC tokens for the AWS role and the gateway
+    steps:
+      - name: Check the release-train script's source
+        env:
+          RT_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          RT_WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          if ! [[ "$RT_WORKFLOW_REPOSITORY" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$ ]] ||
+             ! [[ "$RT_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The job context does not name this workflow's repository and commit; the release-train script has no trusted source."
+            exit 1
+          fi
+          echo "The release-train script comes from $RT_WORKFLOW_REPOSITORY at $RT_WORKFLOW_SHA, this workflow's own commit."
+
+      - name: Check out the release-train script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: workflow-tooling
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+          submodules: false
+
+      - name: Configure AWS credentials (OIDC; may invoke the gateway only)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.role_arn }}
+          # Masks the role's account id before the step below prints the gateway in its env.
+          mask-aws-account-id: true
+          aws-region: ${{ vars.RELEASE_TRAIN_REGION || inputs.aws_region }}
+
+      - name: Record the downstream dispatches
+        env:
+          RT_DISPATCH_RESULTS: ${{ needs.dispatch.outputs.results }}
+          RT_GATEWAY_FUNCTION: ${{ vars.RELEASE_TRAIN_GATEWAY || inputs.gateway_function }}
+          RT_GATEWAY_AUDIENCE: ${{ inputs.gateway_audience }}
+        run: python3 workflow-tooling/.github/scripts/release_train.py report-dispatch
 
   # The other side of the train job's guard: a workflow_run run that does not qualify. No permissions, no OIDC
   # token, no AWS credential and no checkout; it only says in the log and summary why the train did not run. The

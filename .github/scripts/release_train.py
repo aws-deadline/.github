@@ -4,8 +4,9 @@
 # The repo side of the release train (reusable_release_train.yml). The train itself runs in AWS and holds no
 # GitHub credential; this script asks it what to do and does the GitHub writes with the job's GITHUB_TOKEN.
 #
-#   python3 release_train.py run        the run step: GITHUB_TOKEN only
-#   python3 release_train.py dispatch   the dispatch step: the caller's dispatch tokens only (see below)
+#   python3 release_train.py run               the train job: GITHUB_TOKEN and the OIDC role only
+#   python3 release_train.py dispatch          the dispatch job: the caller's dispatch tokens only (see below)
+#   python3 release_train.py report-dispatch   the dispatch-report job: the OIDC role only
 #
 # One run:
 #   0. Refuse unless the mode (the caller's RELEASE_TRAIN_MODE variable) is one of MODES, before anything else.
@@ -46,17 +47,23 @@
 #      trains. A run that hits the limit stops; the next
 #      event (a merge's push, a dispatch) or the daily schedule picks the train up. Before it ends, a run that
 #      waited polls for releases once more (a train that finished may have deferred one).
-#   7. Write the downstream repositories the gateway asked to dispatch (fan-out after a release) to a file for the
-#      dispatch step.
+#   7. Write the downstream repositories the gateway asked to dispatch (fan-out after a release) to the job's
+#      outputs (GITHUB_OUTPUT) for the dispatch job: only the fields it reads (DISPATCH_TARGET_KEYS) of at most
+#      MAX_DISPATCH_TARGETS targets, and the gateway's allowlist.
 #
-# The dispatch step (a separate step, so only it receives the caller's dispatch tokens, and it runs nothing but
-# this script): for each target, check that the repository is in both the gateway's allowlist and the caller's
-# own hard-coded list (dispatch_repos), that the workflow is release_train.yml and the ref that repository's
+# The dispatch job (a job of its own, so only it receives the caller's dispatch tokens: steps of one job share
+# its filesystem, so an earlier step of the train job could have replaced this script before a token-holding step
+# of the same job ran it; the dispatch job has no permissions and runs nothing but a fresh checkout of this
+# workflow's own commit and this script): it first parses the train job's output strictly (parse_dispatch_doc)
+# and fails, dispatching nothing, if anything in it is off. Then for each target, check that the repository is in
+# both the gateway's allowlist and the caller's own hard-coded list (dispatch_repos, from the caller's committed
+# workflow, never from the train job), that the workflow is release_train.yml and the ref that repository's
 # default branch, then POST /repos/<owner>/<repo>/actions/workflows/release_train.yml/dispatches and nothing else.
 # There is one token per GitHub organization (DISPATCH_TOKEN_ENV), chosen by the target's owner: a target owned
 # by any other account is refused, and a target whose organization has no token skips with a notice (the
 # downstream repository's daily run picks the release up). A target never gets another organization's token.
-# It reports each outcome with {"phase": "dispatched"}.
+# Its outcomes go to its job output; the dispatch-report job (the OIDC role, no dispatch token) parses them as
+# strictly and reports them with {"phase": "dispatched"}.
 #
 # Nothing here checks out or executes repository code: the bundle is fetched into a bare repository and only
 # inspected with git plumbing. The GITHUB_TOKEN reaches git only through the environment of the one fetch or
@@ -101,6 +108,22 @@ DISPATCH_TOKEN_ENV: dict[str, str] = {"openjobdescription": "RT_DISPATCH_TOKEN_O
                                       "aws-deadline": "RT_DISPATCH_TOKEN_AWS_DEADLINE"}
 DISPATCH_ORG_NAMES: dict[str, str] = {"openjobdescription": "OpenJobDescription", "aws-deadline": "aws-deadline"}
 REPO_NAME = re.compile(r"[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}")
+# What the dispatch job accepts from the train job's output (parse_dispatch_doc) and the report job from the
+# dispatch job's (parse_dispatch_results). Both are job outputs, so as untrusted as anything a step of the job that
+# wrote them could change: each is checked field by field before it is used.
+MAX_DISPATCH_TARGETS = 20
+MAX_ALLOWED_REPOS = 100
+DISPATCH_TARGET_KEYS: tuple[str, ...] = ("key", "repo", "workflow", "ref")
+DISPATCH_RESULT_KEYS: tuple[str, ...] = ("key", "ok", "status", "outcome", "error")
+DISPATCH_OUTCOMES = frozenset({"dispatched", "refused", "no-token", "failed"})
+# A fan-out target's repository: one of the two organizations' (case-insensitive, as GitHub owners are).
+# The name may not be only dots: GitHub has no such repository, and "." or ".." would change the API path.
+DISPATCH_TARGET_REPO = re.compile(r"(?:OpenJobDescription|aws-deadline)/(?!\.+$)[A-Za-z0-9._-]{1,100}", re.IGNORECASE)
+# A fan-out claim, DISPATCH#release#<owner>/<repo>#<package>#<version>[#<train>], split for the checks below.
+CLAIM_PARTS = re.compile(r"DISPATCH#release#([^#]*)#([^#]*)#([^#]*)(?:#(.*))?", re.DOTALL)
+PACKAGE_NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,99}", re.ASCII)
+STRICT_VERSION = re.compile(r"[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}", re.ASCII)
+TRAIN_SUFFIX = re.compile(r"[A-Za-z0-9-]{1,80}", re.ASCII)
 BRANCH_NAME = re.compile(r"(?!-)(?!.*\.\.)[A-Za-z0-9._/-]{1,100}(?<![./])")
 CLAIM_KEY = re.compile(r"DISPATCH#release#[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}#[A-Za-z0-9._:-]{1,100}#"
                        r"[0-9A-Za-z.+-]{1,40}(#[A-Za-z0-9-]{1,80})?")
@@ -611,8 +634,7 @@ def _mask_urls(plan: dict[str, Any]) -> None:
 
 
 def converse(ctx: Context, call: Callable[[dict[str, Any]], dict[str, Any]], *, wait_s: float, poll_s: float = POLL_S,
-             now: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep,
-             dispatch_file: Path | None = None) -> Conversation:
+             now: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep) -> Conversation:
     """Plan, act, report, then wait for the next handoff while the gateway says a train here is busy.
 
     `call` sends one payload to the gateway (the ID token is added by the caller). GatewayError from the first
@@ -669,11 +691,30 @@ def converse(ctx: Context, call: Callable[[dict[str, Any]], dict[str, Any]], *, 
                 conv.ended, conv.failed = f"the gateway failed {failures} times while waiting: {e}", True
                 break
             plan = {"actions": [], "wait": {"busy": True}, "dispatch": {}}
-    if dispatch_file is not None:
-        fd: int = os.open(dispatch_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as f:
-            json.dump({"allowed": conv.allowed, "targets": conv.targets}, f)
     return conv
+
+
+def dispatch_output(conv: Conversation) -> dict[str, Any]:
+    """The train job's output for the dispatch job: the gateway's allowlist and, of the first MAX_DISPATCH_TARGETS
+    targets (the dispatch step always took only those), only the fields the dispatch job reads."""
+    return {"allowed": list(conv.allowed),
+            "targets": [{k: t.get(k) for k in DISPATCH_TARGET_KEYS} for t in conv.targets[:MAX_DISPATCH_TARGETS]]}
+
+
+def write_output(name: str, value: str) -> None:
+    """Set a step output (GITHUB_OUTPUT), which the job maps to a job output. One line only: a newline in the value
+    could start another output."""
+    if "\n" in value or "\r" in value:
+        raise ValueError(f"the {name} output must be one line")
+    path: str = os.environ.get("GITHUB_OUTPUT", "")
+    if path:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"{name}={value}\n")
+
+
+def _compact(value: Any) -> str:
+    # ensure_ascii: one line of plain ASCII whatever the gateway's strings hold.
+    return json.dumps(value, separators=(",", ":"), ensure_ascii=True)
 
 
 def skipped_trigger() -> str:
@@ -716,7 +757,6 @@ def run() -> int:
         wait_s: float = float(os.environ.get("RT_WAIT_MINUTES") or "60") * 60.0
     except ValueError:
         wait_s = 3600.0
-    dispatch_path: str = os.environ.get("RT_DISPATCH_FILE", "")
     with tempfile.TemporaryDirectory(prefix="release-train-", dir=os.environ.get("RUNNER_TEMP")) as tmp:
         workdir: Path = Path(tmp)
 
@@ -727,11 +767,13 @@ def run() -> int:
                                api=api, download=download, schedule=os.environ.get("RT_SCHEDULE", ""),
                                weekly_enabled=os.environ.get("RT_WEEKLY_ENABLED", ""))
         try:
-            conv: Conversation = converse(ctx, call, wait_s=wait_s,
-                                          dispatch_file=Path(dispatch_path) if dispatch_path else None)
+            conv: Conversation = converse(ctx, call, wait_s=wait_s)
         except GatewayError as e:
             print(f"::error::{e}")
             return 1
+    # The fan-out for the dispatch job, which alone has the dispatch tokens (this job never sees them).
+    write_output("dispatch", "true" if conv.targets else "false")
+    write_output("dispatch_doc", _compact(dispatch_output(conv)))
     text: str = _summary(conv.plan, conv.results)
     text += f"\nWaited {conv.waits} time(s); {conv.ended}. Downstream dispatches: {len(conv.targets)}.\n"
     print(text)
@@ -810,23 +852,101 @@ def dispatch(doc: dict[str, Any], tokens: dict[str, str], caller_repos: frozense
     """Dispatch each fan-out target the run collected with its organization's token (`tokens`, keyed by the
     lower-case owner); one result per target, never naming a token."""
     allowed: set[str] = {str(r) for r in doc.get("allowed", [])}
-    targets: list[Any] = [t for t in doc.get("targets", []) if isinstance(t, dict)][:20]
+    targets: list[Any] = [t for t in doc.get("targets", []) if isinstance(t, dict)][:MAX_DISPATCH_TARGETS]
     return [_dispatch_one(t, tokens, allowed, caller_repos, api_for, sleep) for t in targets]
 
 
+class DispatchInputError(ValueError):
+    """A job output the dispatch or report job will not use: it fails that job before anything is sent."""
+
+
+def _claim_problem(key: str, repo: str) -> str:
+    """Why `key` is not a fan-out claim for `repo` (DISPATCH#release#<repo>#<package>#<version>[#<train>]), or ""."""
+    parts: re.Match[str] | None = CLAIM_PARTS.fullmatch(key)
+    if parts is None:
+        return "is not a fan-out claim key"
+    named, package, version, train = parts.groups()
+    if named != repo:
+        return "does not name its repository"
+    if not PACKAGE_NAME.fullmatch(package):
+        return f"has a bad package name (want {PACKAGE_NAME.pattern})"
+    if not STRICT_VERSION.fullmatch(version):
+        return "has a version that is not X.Y.Z"
+    if train is not None and not TRAIN_SUFFIX.fullmatch(train):
+        return f"has a bad claim train suffix (want {TRAIN_SUFFIX.pattern})"
+    # The parts above are each narrower than this; it stays as the same check _dispatch_one makes.
+    if not CLAIM_KEY.fullmatch(key):
+        return "is not a fan-out claim key"
+    return ""
+
+
+def parse_dispatch_doc(text: str) -> dict[str, Any]:
+    """The train job's dispatch_doc output, checked field by field: an object with exactly "allowed" (at most
+    MAX_ALLOWED_REPOS owner/repo names) and "targets" (at most MAX_DISPATCH_TARGETS objects with exactly the string
+    keys DISPATCH_TARGET_KEYS: a claim key naming its repository with a package name and an X.Y.Z version, a
+    repository of OpenJobDescription or aws-deadline, release_train.yml, a branch name). Raises DispatchInputError
+    for anything else; the caller's own dispatch_repos and the targets' default branches are checked per target
+    after this, as before."""
+    try:
+        doc: Any = json.loads(text)
+    except ValueError:
+        raise DispatchInputError("the train job's dispatch output is not JSON") from None
+    if not isinstance(doc, dict) or set(doc) != {"allowed", "targets"} or not isinstance(doc["allowed"], list) \
+            or not isinstance(doc["targets"], list):
+        raise DispatchInputError('the dispatch output must be an object with exactly the lists "allowed" and "targets"')
+    allowed: list[Any] = doc["allowed"]
+    if len(allowed) > MAX_ALLOWED_REPOS or not all(isinstance(r, str) and REPO_NAME.fullmatch(r) for r in allowed):
+        raise DispatchInputError(f'"allowed" must be at most {MAX_ALLOWED_REPOS} owner/repo names')
+    targets: list[Any] = doc["targets"]
+    if len(targets) > MAX_DISPATCH_TARGETS:
+        raise DispatchInputError(f"the dispatch output may name at most {MAX_DISPATCH_TARGETS} targets, "
+                                 f"not {len(targets)}")
+    seen: set[str] = set()
+    for i, target in enumerate(targets):
+        if not isinstance(target, dict) or set(target) != set(DISPATCH_TARGET_KEYS) \
+                or not all(isinstance(target[k], str) for k in DISPATCH_TARGET_KEYS):
+            raise DispatchInputError(f"target {i} must be an object with exactly the string keys "
+                                     f"{', '.join(DISPATCH_TARGET_KEYS)}")
+        repo: str = target["repo"]
+        if not DISPATCH_TARGET_REPO.fullmatch(repo) or ".." in repo:
+            raise DispatchInputError(f"target {i}: the repository must be OpenJobDescription/<name> or "
+                                     "aws-deadline/<name> with a name of letters, digits, '.', '_' and '-'")
+        problem: str = _claim_problem(target["key"], repo)
+        if problem:
+            raise DispatchInputError(f"target {i}: its claim {problem}")
+        if target["workflow"] != FANOUT_WORKFLOW:
+            raise DispatchInputError(f"target {i}: the workflow must be {FANOUT_WORKFLOW}")
+        if not BRANCH_NAME.fullmatch(target["ref"]):
+            raise DispatchInputError(f"target {i}: the ref must be a branch name")
+        if target["key"] in seen:
+            raise DispatchInputError(f"target {i}: its claim is named twice")
+        seen.add(target["key"])
+    return {"allowed": allowed, "targets": targets}
+
+
 def run_dispatch() -> int:
-    mask_gateway(os.environ.get("RT_GATEWAY_FUNCTION", ""))
-    # The run step writes no fan-out after a failed Publish; this guards against a file left by anything else.
+    """The dispatch job: the only code that sees the dispatch tokens. It reads the train job's output and the
+    caller's dispatch_repos from env (never interpolated into a script) and talks to GitHub only."""
+    # The train job writes no fan-out after a failed Publish; this guards against an output from anything else.
     if skipped_trigger():
         print("No downstream dispatches: the Release: Publish run this follows did not succeed.")
         return 0
-    path: str = os.environ.get("RT_DISPATCH_FILE", "")
-    if not path or not os.path.isfile(path):
+    text: str = os.environ.get("RT_DISPATCH_DOC", "")
+    if not text.strip():
+        # The runner silently drops a job output that holds a masked value, so a fan-out the train job reported
+        # can arrive here empty. That is a failure, not "nothing to dispatch".
+        if os.environ.get("RT_DISPATCH_FLAG", "") == "true":
+            print("::error::The train job reported downstream dispatches but its dispatch_doc output is empty, most "
+                  "likely because the runner dropped it for holding a masked value; nothing was dispatched.")
+            return 1
         print("No downstream dispatches.")
         return 0
-    with open(path, encoding="utf-8") as f:
-        doc: dict[str, Any] = json.load(f)
-    if not doc.get("targets"):
+    try:
+        doc: dict[str, Any] = parse_dispatch_doc(text)
+    except DispatchInputError as e:
+        print(f"::error::{e}; nothing was dispatched.")
+        return 1
+    if not doc["targets"]:
         print("No downstream dispatches.")
         return 0
     tokens: dict[str, str] = {org: os.environ.get(env, "").strip() for org, env in DISPATCH_TOKEN_ENV.items()}
@@ -841,17 +961,61 @@ def run_dispatch() -> int:
         lines.append(f"| {r['repo']} | {r['outcome']}{': ' + r['error'] if r['error'] else ''} |")
         if not r["ok"] and r["outcome"] != "no-token":
             print(f"::warning::dispatch of {r['repo']}: {r['outcome']}: {r['error']}")
-    text: str = "\n".join(lines) + "\n"
+    text = "\n".join(lines) + "\n"
     print(text)
     summary_path: str = os.environ.get("GITHUB_STEP_SUMMARY", "")
     if summary_path:
         with open(summary_path, "a", encoding="utf-8") as f:
             f.write(text)
+    # The report job records these with the gateway; this job has no OIDC token or AWS credential to do it.
+    write_output("results", _compact([{k: r[k] for k in DISPATCH_RESULT_KEYS} for r in results]))
+    return 0
+
+
+def parse_dispatch_results(text: str) -> list[dict[str, Any]]:
+    """The dispatch job's results output, checked field by field: a list of at most MAX_DISPATCH_TARGETS objects
+    with exactly DISPATCH_RESULT_KEYS. Raises DispatchInputError for anything else."""
+    try:
+        results: Any = json.loads(text)
+    except ValueError:
+        raise DispatchInputError("the dispatch job's results output is not JSON") from None
+    if not isinstance(results, list):
+        raise DispatchInputError("the dispatch results must be a list")
+    if len(results) > MAX_DISPATCH_TARGETS:
+        raise DispatchInputError(f"the dispatch results may hold at most {MAX_DISPATCH_TARGETS} entries")
+    for i, r in enumerate(results):
+        if not isinstance(r, dict) or set(r) != set(DISPATCH_RESULT_KEYS):
+            raise DispatchInputError(f"result {i} must be an object with exactly the keys {', '.join(DISPATCH_RESULT_KEYS)}")
+        if not isinstance(r["key"], str) or not CLAIM_KEY.fullmatch(r["key"]):
+            raise DispatchInputError(f"result {i}: the key is not a fan-out claim key")
+        if not isinstance(r["ok"], bool):
+            raise DispatchInputError(f"result {i}: ok must be true or false")
+        if type(r["status"]) is not int or not 0 <= r["status"] <= 599:
+            raise DispatchInputError(f"result {i}: status must be an HTTP status or 0")
+        if r["outcome"] not in DISPATCH_OUTCOMES:
+            raise DispatchInputError(f"result {i}: outcome must be one of {', '.join(sorted(DISPATCH_OUTCOMES))}")
+        if not isinstance(r["error"], str) or len(r["error"]) > 1000:
+            raise DispatchInputError(f"result {i}: error must be a string of at most 1000 characters")
+    return results
+
+
+def run_dispatch_report() -> int:
+    """The dispatch-report job: the dispatch job's results to the gateway, with this job's OIDC role."""
+    mask_gateway(os.environ.get("RT_GATEWAY_FUNCTION", ""))
+    text: str = os.environ.get("RT_DISPATCH_RESULTS", "")
+    if not text.strip():
+        print("No downstream dispatches to record.")
+        return 0
+    try:
+        results: list[dict[str, Any]] = parse_dispatch_results(text)
+    except DispatchInputError as e:
+        print(f"::error::{e}; nothing was recorded.")
+        return 1
     with tempfile.TemporaryDirectory(prefix="release-train-", dir=os.environ.get("RUNNER_TEMP")) as tmp:
         try:
             invoke(os.environ["RT_GATEWAY_FUNCTION"], {
                 "phase": "dispatched", "id_token": id_token(os.environ["RT_GATEWAY_AUDIENCE"]),
-                "results": [{k: r[k] for k in ("key", "ok", "status", "outcome", "error")} for r in results]}, Path(tmp))
+                "results": results}, Path(tmp))
         except GatewayError as e:
             print(f"::warning::the dispatch results were not recorded: {e}")
     return 0
@@ -862,7 +1026,9 @@ def main(argv: list[str]) -> int:
         return run()
     if argv[1:] == ["dispatch"]:
         return run_dispatch()
-    print("usage: release_train.py run | dispatch", file=sys.stderr)
+    if argv[1:] == ["report-dispatch"]:
+        return run_dispatch_report()
+    print("usage: release_train.py run | dispatch | report-dispatch", file=sys.stderr)
     return 2
 
 
