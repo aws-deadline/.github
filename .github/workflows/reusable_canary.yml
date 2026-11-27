@@ -15,6 +15,14 @@ on:
       os:
         required: true
         type: string
+      session_runtime:
+        description: >-
+          Worker agent session runtime to pin for the E2E run (python, rust or
+          service-selected). Forwarded to CodeBuild as WORKER_AGENT_SESSION_RUNTIME.
+          Leave empty to keep the agent default.
+        required: false
+        type: string
+        default: ''
 
 jobs:
   Canary:
@@ -57,10 +65,12 @@ jobs:
           hide-cloudwatch-logs: true
           env-vars-for-codebuild: |
               TEST_TYPE,
-              OPERATING_SYSTEM
+              OPERATING_SYSTEM,
+              ${{ inputs.session_runtime && 'WORKER_AGENT_SESSION_RUNTIME' || '' }}
         env:
           TEST_TYPE: WHEEL
           OPERATING_SYSTEM: ${{inputs.os}}
+          WORKER_AGENT_SESSION_RUNTIME: ${{inputs.session_runtime}}
 
       - name: Run Canary for Release
         if: ${{inputs.branch == 'release'}}
@@ -70,6 +80,8 @@ jobs:
           source-version-override: refs/heads/release
           hide-cloudwatch-logs: true
           env-vars-for-codebuild: |
-              OPERATING_SYSTEM
+              OPERATING_SYSTEM,
+              ${{ inputs.session_runtime && 'WORKER_AGENT_SESSION_RUNTIME' || '' }}
         env:
           OPERATING_SYSTEM: ${{inputs.os}}
+          WORKER_AGENT_SESSION_RUNTIME: ${{inputs.session_runtime}}
